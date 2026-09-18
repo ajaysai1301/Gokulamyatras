@@ -5,6 +5,7 @@ import { Download, Loader2 } from 'lucide-react';
 import { AdminShell } from '@/components/admin/admin-shell';
 import { staffApi, ADMIN_TOKEN } from '@/lib/staff-client';
 import { formatINR, formatDate } from '@/lib/format';
+import { csvCell } from '@/lib/csv';
 
 interface ReportRow { id: string; name: string; startDate: string; capacity: number; booked: number; available: number; confirmed: number; pending: number; cancelled: number; checkedIn: number; revenue: number; }
 
@@ -15,7 +16,7 @@ export default function AdminReportsPage() {
 
   const exportCsv = () => {
     const headers = ['Yatra', 'Date', 'Capacity', 'Booked', 'Available', 'Confirmed', 'Pending', 'Cancelled', 'CheckedIn', 'Revenue'];
-    const lines = rows.map((r) => [r.name, formatDate(r.startDate), r.capacity, r.booked, r.available, r.confirmed, r.pending, r.cancelled, r.checkedIn, r.revenue].join(','));
+    const lines = rows.map((r) => [r.name, formatDate(r.startDate), r.capacity, r.booked, r.available, r.confirmed, r.pending, r.cancelled, r.checkedIn, r.revenue].map(csvCell).join(','));
     const csv = [headers.join(','), ...lines].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gokulamyatras-report.csv'; a.click();

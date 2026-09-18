@@ -1,4 +1,4 @@
-import { getDb, Collections } from '@/lib/db/mongo';
+import { getDb, Collections, sessionOptions } from '@/lib/db/mongo';
 import { StaffUser } from '@/lib/domain/types';
 
 export interface UserRepository {
@@ -11,22 +11,22 @@ export interface UserRepository {
 class MongoUserRepository implements UserRepository {
   async findByEmail(email: string) {
     const db = await getDb();
-    const doc = await db.collection(Collections.users).findOne({ email: email.toLowerCase() }, { projection: { _id: 0 } });
+    const doc = await db.collection(Collections.users).findOne({ email: email.toLowerCase() }, { ...sessionOptions(), projection: { _id: 0 } });
     return (doc as unknown as StaffUser) || null;
   }
   async findById(id: string) {
     const db = await getDb();
-    const doc = await db.collection(Collections.users).findOne({ id }, { projection: { _id: 0 } });
+    const doc = await db.collection(Collections.users).findOne({ id }, { ...sessionOptions(), projection: { _id: 0 } });
     return (doc as unknown as StaffUser) || null;
   }
   async insertMany(users: StaffUser[]) {
     if (!users.length) return;
     const db = await getDb();
-    await db.collection(Collections.users).insertMany(users.map((u) => ({ ...u })));
+    for(const u of users) await db.collection(Collections.users).updateOne({email:u.email},{$setOnInsert:u},{...sessionOptions(),upsert:true});
   }
   async count() {
     const db = await getDb();
-    return db.collection(Collections.users).countDocuments();
+    return db.collection(Collections.users).countDocuments({}, sessionOptions());
   }
 }
 

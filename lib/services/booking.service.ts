@@ -1,3 +1,8 @@
+import { getAuditRepository } from '@/lib/repositories/audit.repository';
+import { createHash } from 'node:crypto';
+import { getUnitOfWork } from '@/lib/repositories/unit-of-work';
+import { getTerms } from '@/lib/services/terms.service';
+import { createBookingSchema } from '@/lib/validation/schemas';
 import { v4 as uuidv4 } from 'uuid';
 import { getBookingRepository } from '@/lib/repositories/booking.repository';
 import { getConsentRepository } from '@/lib/repositories/consent.repository';
@@ -18,13 +23,24 @@ export class BookingError extends Error {
   }
 }
 
-export async function createBooking(input: CreateBookingInput): Promise<{ booking: Booking }> {
+export async function createBooking(input: CreateBookingInput, recordedBy?:string): Promise<{ booking: Booking }> {
+  input = { ...createBookingSchema.parse(input), source: input.source };
   await ensureSeeded();
+  await expirePendingBookings();
+  return getUnitOfWork().run(async () => {
   const yatraRepo = getYatraRepository();
   const bookingRepo = getBookingRepository();
 
+  const requestHash=createHash('sha256').update(JSON.stringify(input)).digest('hex');
+  if(input.requestKey) {
+   const existing=await bookingRepo.findByRequestKey(input.requestKey);
+   if(existing) {if(existing.requestHash!==requestHash)throw new BookingError('KEY_REUSED','Request key already used for different details');return {booking:existing};}
+  }
   const yatra = await yatraRepo.findBySlug(input.yatraSlug);
   if (!yatra) throw new BookingError('YATRA_NOT_FOUND', 'Yatra not found');
+  if(yatra.status !== 'PUBLISHED' || Date.parse(yatra.startDate) <= Date.now()) throw new BookingError('NOT_BOOKABLE','Yatra is not open for booking');
+  if(input.termsVersion !== yatra.tcVersion) throw new BookingError('TERMS_CHANGED','Terms changed; review and accept the current version');
+  const terms = await getTerms(yatra);
   if (!input.acceptedTerms) throw new BookingError('TERMS_REQUIRED', 'Terms & Conditions must be accepted');
 
   const count = input.travellers.length;
@@ -43,7 +59,11 @@ export async function createBooking(input: CreateBookingInput): Promise<{ bookin
     const booking: Booking = {
       id: uuidv4(),
       reference,
+      requestKey:input.requestKey,
+      requestHash,
       customerId: customer.id,
+      customerSnapshot: { id:customer.id, createdAt:now, updatedAt:now, ...input.primaryCustomer },
+      expiresAt: new Date(Date.now()+30*60*1000).toISOString(),
       yatraId: yatra.id,
       yatraSlug: yatra.slug,
       yatraName: yatra.name,
@@ -81,31 +101,37 @@ export async function createBooking(input: CreateBookingInput): Promise<{ bookin
       yatraId: yatra.id,
       version: yatra.tcVersion,
       agreed: true,
+      recordedBy,
+      termsHtml: terms.html,
+      contentHash: terms.contentHash,
       agreedAt: now,
     };
     await getConsentRepository().create(consent);
 
+    await getAuditRepository().append({action:'BOOKING_CREATED',entity:'Booking',entityId:booking.id,userId:recordedBy});
     return { booking };
   } catch (e) {
-    // Roll back the seat reservation if anything failed after reserving.
-    await yatraRepo.releaseSeats(yatra.id, count).catch(() => {});
+    // The unit of work rolls back all writes, including seats.
     throw e;
   }
+  });
 }
 
 export async function getBookingView(reference: string): Promise<BookingView | null> {
   const bookingRepo = getBookingRepository();
   const booking = await bookingRepo.findByReference(reference);
   if (!booking) return null;
-  const [travellers, payments, consent, ticket, checkIn] = await Promise.all([
-    bookingRepo.findTravellers(booking.id),
-    getPaymentRepository().findByBooking(booking.id),
-    getConsentRepository().findByBooking(booking.id),
-    getTicketRepository().findByBooking(booking.id),
-    getCheckInRepository().findByBooking(booking.id),
-  ]);
+  const [travellers, payments, consent, ticket, checkIn] = [
+    // Mongo sessions require sequential operations.
+
+    await bookingRepo.findTravellers(booking.id),
+    await getPaymentRepository().findByBooking(booking.id),
+    await getConsentRepository().findByBooking(booking.id),
+    await getTicketRepository().findByBooking(booking.id),
+    await getCheckInRepository().findByBooking(booking.id),
+  ];
   const { getCustomerRepository } = await import('@/lib/repositories/customer.repository');
-  const customer = await getCustomerRepository().findById(booking.customerId);
+  const customer = booking.customerSnapshot || await getCustomerRepository().findById(booking.customerId);
   return { ...booking, customer, travellers, payments, consent, ticket, checkIn };
 }
 
@@ -113,7 +139,7 @@ export async function getBookingView(reference: string): Promise<BookingView | n
 export async function lookupBooking(reference: string, mobile: string): Promise<BookingView | null> {
   const view = await getBookingView(reference);
   if (!view || !view.customer) return null;
-  if (view.customer.mobile.replace(/\D/g, '').slice(-10) !== mobile.replace(/\D/g, '').slice(-10)) return null;
+  if (view.customer.mobile !== mobile) return null;
   return view;
 }
 
@@ -130,7 +156,7 @@ export async function listBookings(filter: {
   const { getCustomerRepository } = await import('@/lib/repositories/customer.repository');
   const custRepo = getCustomerRepository();
   const checkinRepo = getCheckInRepository();
-  const bookings = await bookingRepo.findAll(filter);
+  const bookings = await bookingRepo.findAll({ ...filter, search: undefined });
   const rows: AdminBookingRow[] = [];
   for (const b of bookings) {
     const customer = await custRepo.findById(b.customerId);
@@ -152,12 +178,28 @@ export async function listBookings(filter: {
   return rows;
 }
 
-export async function cancelBooking(reference: string): Promise<Booking | null> {
-  const bookingRepo = getBookingRepository();
-  const booking = await bookingRepo.findByReference(reference);
-  if (!booking) return null;
-  if (booking.status !== BookingStatus.CANCELLED) {
-    await getYatraRepository().releaseSeats(booking.yatraId, booking.travellerCount).catch(() => {});
-  }
-  return bookingRepo.update(booking.id, { status: BookingStatus.CANCELLED });
+export async function cancelBooking(reference: string,userId?:string): Promise<Booking | null> {
+ return getUnitOfWork().run(async()=>{
+  const repo=getBookingRepository(); const b=await repo.findByReference(reference);
+  if(!b || ['CANCELLED','EXPIRED','REFUNDED'].includes(b.status)) return b;
+  if(await getCheckInRepository().findByBooking(b.id)) throw new BookingError('CHECKED_IN','Cannot cancel a checked-in booking');
+  const updated=await repo.update(b.id,{status:BookingStatus.CANCELLED});
+  await getYatraRepository().releaseSeats(b.yatraId,b.travellerCount);
+  await getAuditRepository().append({action:'BOOKING_CANCELLED',entity:'Booking',entityId:b.id,userId});
+  return updated;
+ });
+}
+/** Called before new bookings; expiry releases seats in the same transaction. */
+export async function expirePendingBookings() {
+ const repo=getBookingRepository();
+ const pending=await repo.findAll({status:BookingStatus.PAYMENT_PENDING});
+ for(const candidate of pending) {
+  if(!candidate.expiresAt || Date.parse(candidate.expiresAt)>Date.now()) continue;
+  await getUnitOfWork().run(async()=>{
+   const b=await repo.findById(candidate.id);
+   if(!b || b.status!==BookingStatus.PAYMENT_PENDING || Date.parse(b.expiresAt)>Date.now()) return;
+   await repo.update(b.id,{status:BookingStatus.EXPIRED});
+   await getYatraRepository().releaseSeats(b.yatraId,b.travellerCount);
+  });
+ }
 }

@@ -106,17 +106,17 @@ function ManualBooking({ open, onClose, onDone }: { open: boolean; onClose: () =
   const [yatras, setYatras] = useState<YatraView[]>([]);
   const [slug, setSlug] = useState('');
   const [name, setName] = useState(''); const [mobile, setMobile] = useState('');
-  const [count, setCount] = useState(1);
+  const [travellers,setTravellers]=useState([{fullName:'',age:0,gender:Gender.OTHER}]);
   const [method, setMethod] = useState('CASH');
   const [saving, setSaving] = useState(false);
+  const [acceptedTerms,setAcceptedTerms]=useState(false);
   useEffect(() => { if (open) staffApi<{ yatras: YatraView[] }>(ADMIN_TOKEN, '/admin/yatras').then((d) => setYatras(d.yatras.filter((y) => y.status === 'PUBLISHED'))); }, [open]);
 
   const save = async () => {
     if (!slug || !name || !mobile) { toast.error('Yatra, name and mobile are required'); return; }
     setSaving(true);
-    const travellers = Array.from({ length: count }, (_, i) => ({ fullName: i === 0 ? name : `${name} (guest ${i})`, age: 30, gender: Gender.OTHER }));
     try {
-      await staffApi(ADMIN_TOKEN, '/admin/bookings', { method: 'POST', body: JSON.stringify({ yatraSlug: slug, primaryCustomer: { fullName: name, mobile }, travellers, paymentMethod: method }) });
+      await staffApi(ADMIN_TOKEN, '/admin/bookings', { method: 'POST', body: JSON.stringify({ yatraSlug: slug, primaryCustomer: { fullName: name, mobile }, travellers, paymentMethod: method, acceptedTerms, termsVersion: yatras.find(y=>y.slug===slug)?.tcVersion }) });
       toast.success('Manual booking created & confirmed'); onDone();
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); } finally { setSaving(false); }
   };
@@ -127,9 +127,15 @@ function ManualBooking({ open, onClose, onDone }: { open: boolean; onClose: () =
         <label>Yatra<select className="gy-input mt-1" value={slug} onChange={(e) => setSlug(e.target.value)}><option value="">Select yatra</option>{yatras.map((y) => <option key={y.id} value={y.slug}>{y.name} ({y.availability.available} left)</option>)}</select></label>
         <label>Customer name<input className="gy-input mt-1" value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label>Mobile<input className="gy-input mt-1" value={mobile} onChange={(e) => setMobile(e.target.value)} /></label>
-        <label>Travellers<input type="number" min={1} className="gy-input mt-1" value={count} onChange={(e) => setCount(Math.max(1, Number(e.target.value)))} /></label>
-        <label>Payment method<select className="gy-input mt-1" value={method} onChange={(e) => setMethod(e.target.value)}><option>CASH</option><option>UPI</option><option>BANK_TRANSFER</option><option>RAZORPAY</option></select></label>
+        {travellers.map((t,i)=><div key={i} className="grid grid-cols-3 gap-2">
+          <label>Traveller {i+1}<input className="gy-input" value={t.fullName} onChange={e=>setTravellers(v=>v.map((x,j)=>j===i?{...x,fullName:e.target.value}:x))}/></label>
+          <label>Age<input type="number" min={1} max={120} className="gy-input" value={t.age||''} onChange={e=>setTravellers(v=>v.map((x,j)=>j===i?{...x,age:Number(e.target.value)}:x))}/></label>
+          <label>Gender<select className="gy-input" value={t.gender} onChange={e=>setTravellers(v=>v.map((x,j)=>j===i?{...x,gender:e.target.value as Gender}:x))}><option>OTHER</option><option>MALE</option><option>FEMALE</option></select></label>
+        </div>)}
+        <button disabled={travellers.length>=20} onClick={()=>setTravellers(v=>[...v,{fullName:'',age:0,gender:Gender.OTHER}])}>Add traveller</button>
+        <label>Payment method<select className="gy-input mt-1" value={method} onChange={(e) => setMethod(e.target.value)}><option>CASH</option><option>UPI</option><option>BANK_TRANSFER</option></select></label>
       </div>
+      <label className="mt-4 flex gap-2 text-sm"><input type="checkbox" checked={acceptedTerms} onChange={e=>setAcceptedTerms(e.target.checked)} /> Customer has accepted the current terms. <a href={`/api/yatras/${slug}/terms`} target="_blank" rel="noopener noreferrer">View terms</a></label>
       <div className="mt-4 flex justify-end gap-2">
         <button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600">Cancel</button>
         <button onClick={save} disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-saffron px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{saving && <Loader2 className="h-4 w-4 animate-spin" />} Create & confirm</button>

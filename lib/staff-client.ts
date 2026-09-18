@@ -7,13 +7,14 @@ export const COORD_TOKEN = 'gy_coord_auth';
 export interface StaffAuth { token: string; role: string; name: string; email: string; }
 
 export function saveAuth(key: string, data: StaffAuth) {
-  localStorage.setItem(key, JSON.stringify(data));
+  localStorage.removeItem(key);
+  sessionStorage.setItem(key, JSON.stringify({...data,token:''}));
 }
 export function getAuth(key: string): StaffAuth | null {
   if (typeof window === 'undefined') return null;
-  try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; }
+  try { return JSON.parse(sessionStorage.getItem(key) || 'null'); } catch { return null; }
 }
-export function clearAuth(key: string) { localStorage.removeItem(key); }
+export function clearAuth(key: string) { localStorage.removeItem(key); sessionStorage.removeItem(key); void fetch('/api/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); }
 
 export async function staffLogin(email: string, password: string): Promise<StaffAuth> {
   const res = await fetch('/api/auth/login', {
