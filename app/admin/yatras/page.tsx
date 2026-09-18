@@ -6,7 +6,7 @@ import { Plus, Pencil, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { AdminShell, Modal } from '@/components/admin/admin-shell';
 import { staffApi, ADMIN_TOKEN } from '@/lib/staff-client';
 import { formatINR, formatDate } from '@/lib/format';
-import { YatraView } from '@/lib/domain/types';
+import { ItineraryDay, ItineraryItem, YatraView } from '@/lib/domain/types';
 
 const toDateInput = (iso: string) => (iso ? iso.slice(0, 10) : '');
 const fromDateInput = (d: string) => (d ? new Date(d + 'T00:00:00.000Z').toISOString() : new Date().toISOString());
@@ -21,7 +21,8 @@ export default function AdminYatrasPage() {
   const [editing, setEditing] = useState<YatraView | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FormState>({});
-  const [arrays, setArrays] = useState({ highlights: '', included: '', excluded: '', importantInfo: '', itinerary: '' });
+  const [arrays, setArrays] = useState({ highlights: '', included: '', excluded: '', importantInfo: '' });
+  const [itinerary, setItinerary] = useState<ItineraryDay[]>([]);
 
   const load = () => {
     setLoading(true);
@@ -32,20 +33,20 @@ export default function AdminYatrasPage() {
   const openCreate = () => {
     setEditing(null);
     setForm({ name: '', subtitle: '', destination: '', description: '', heroImage: '', startDate: '', endDate: '', durationDays: 1, durationNights: 0, startingPoint: '', reportingLocation: '', reportingTime: '', price: 0, capacity: 0, featured: false, status: 'DRAFT', tcVersion: '1.0' });
-    setArrays({ highlights: '', included: '', excluded: '', importantInfo: '', itinerary: '[]' });
+    setArrays({ highlights: '', included: '', excluded: '', importantInfo: '' });
+    setItinerary([]);
     setOpen(true);
   };
   const openEdit = (y: YatraView) => {
     setEditing(y);
     setForm({ name: y.name, subtitle: y.subtitle, destination: y.destination, description: y.description, heroImage: y.heroImage, startDate: toDateInput(y.startDate), endDate: toDateInput(y.endDate), durationDays: y.durationDays, durationNights: y.durationNights, startingPoint: y.startingPoint, reportingLocation: y.reportingLocation, reportingTime: y.reportingTime, price: y.price, capacity: y.capacity, featured: y.featured, status: y.status, tcVersion: y.tcVersion });
-    setArrays({ highlights: y.highlights.join('\n'), included: y.included.join('\n'), excluded: y.excluded.join('\n'), importantInfo: y.importantInfo.join('\n'), itinerary: JSON.stringify(y.itinerary, null, 2) });
+    setArrays({ highlights: y.highlights.join('\n'), included: y.included.join('\n'), excluded: y.excluded.join('\n'), importantInfo: y.importantInfo.join('\n') });
+    setItinerary(y.itinerary.map((day) => ({ day: day.day, title: day.title, items: day.items.map((item) => ({ time: item.time || '', title: item.title, description: item.description || '' })) })));
     setOpen(true);
   };
 
   const save = async () => {
     setSaving(true);
-    let itinerary;
-    try { itinerary = JSON.parse(arrays.itinerary || '[]'); } catch { toast.error('Itinerary is not valid JSON'); setSaving(false); return; }
     const payload = {
       ...form,
       startDate: fromDateInput(String(form.startDate)),
@@ -54,7 +55,7 @@ export default function AdminYatrasPage() {
       price: Number(form.price), capacity: Number(form.capacity),
       highlights: linesToArr(arrays.highlights), included: linesToArr(arrays.included),
       excluded: linesToArr(arrays.excluded), importantInfo: linesToArr(arrays.importantInfo),
-      itinerary,
+      itinerary: itinerary.map((day, index) => ({ ...day, day: index + 1, title: day.title.trim(), items: day.items.filter((item) => item.title.trim()).map((item) => ({ time: item.time.trim(), title: item.title.trim(), ...((item.description || '').trim() ? { description: (item.description || '').trim() } : {}) })) })).filter((day) => day.title || day.items.length),
     };
     try {
       if (editing) await staffApi(ADMIN_TOKEN, `/admin/yatras/${editing.id}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -71,6 +72,10 @@ export default function AdminYatrasPage() {
   };
 
   const set = (k: string, v: string | number | boolean) => setForm((f) => ({ ...f, [k]: v }));
+  const updateDay = (index: number, patch: Partial<ItineraryDay>) => setItinerary((days) => days.map((day, i) => i === index ? { ...day, ...patch } : day));
+  const updateItem = (dayIndex: number, itemIndex: number, patch: Partial<ItineraryItem>) => setItinerary((days) => days.map((day, i) => i === dayIndex ? { ...day, items: day.items.map((item, j) => j === itemIndex ? { ...item, ...patch } : item) } : day));
+  const addDay = () => setItinerary((days) => [...days, { day: days.length + 1, title: '', items: [{ time: '', title: '', description: '' }] }]);
+  const addItem = (dayIndex: number) => setItinerary((days) => days.map((day, i) => i === dayIndex ? { ...day, items: [...day.items, { time: '', title: '', description: '' }] } : day));
 
   return (
     <AdminShell title="Yatras">
@@ -126,7 +131,10 @@ export default function AdminYatrasPage() {
           <Ta label="Included (one per line)" v={arrays.included} on={(v) => setArrays((a) => ({ ...a, included: v }))} />
           <Ta label="Excluded (one per line)" v={arrays.excluded} on={(v) => setArrays((a) => ({ ...a, excluded: v }))} />
           <Ta label="Important info (one per line)" v={arrays.importantInfo} on={(v) => setArrays((a) => ({ ...a, importantInfo: v }))} full />
-          <Ta label="Itinerary (JSON)" v={arrays.itinerary} on={(v) => setArrays((a) => ({ ...a, itinerary: v }))} full mono />
+          <div className="sm:col-span-2 rounded-xl border border-brand-sand bg-brand-cream/40 p-4">
+            <div className="mb-3 flex items-center justify-between"><div><h3 className="font-semibold text-slate-900">Itinerary</h3><p className="text-xs text-slate-500">Add each travel day and its activities.</p></div><button type="button" onClick={addDay} className="inline-flex items-center gap-1 rounded-lg bg-brand-saffron px-3 py-2 text-xs font-semibold text-white"><Plus className="h-3.5 w-3.5" /> Add day</button></div>
+            <div className="space-y-4">{itinerary.map((day, dayIndex) => <div key={dayIndex} className="rounded-lg border border-slate-200 bg-white p-3"><div className="flex items-end gap-2"><label className="flex-1 text-xs font-semibold text-slate-600">Day {dayIndex + 1} title<input className="gy-input mt-1" value={day.title} placeholder="Arrival in Tirupati" onChange={e=>updateDay(dayIndex,{title:e.target.value})} /></label><button type="button" className="mb-1 rounded-md px-2 py-2 text-xs text-red-600 hover:bg-red-50" onClick={()=>setItinerary(days=>days.filter((_,i)=>i!==dayIndex))}>Remove day</button></div><div className="mt-3 space-y-2">{day.items.map((item,itemIndex)=><div key={itemIndex} className="grid gap-2 rounded-md bg-slate-50 p-2 sm:grid-cols-[120px_1fr_auto]"><input className="gy-input" placeholder="09:00 AM" aria-label={`Day ${dayIndex+1} activity ${itemIndex+1} time`} value={item.time} onChange={e=>updateItem(dayIndex,itemIndex,{time:e.target.value})}/><div className="space-y-2"><input className="gy-input" placeholder="Activity title" aria-label={`Day ${dayIndex+1} activity ${itemIndex+1} title`} value={item.title} onChange={e=>updateItem(dayIndex,itemIndex,{title:e.target.value})}/><input className="gy-input" placeholder="Optional details" aria-label={`Day ${dayIndex+1} activity ${itemIndex+1} description`} value={item.description || ''} onChange={e=>updateItem(dayIndex,itemIndex,{description:e.target.value})}/></div><button type="button" className="self-start rounded-md px-2 py-2 text-xs text-red-600 hover:bg-red-100" onClick={()=>setItinerary(days=>days.map((d,i)=>i===dayIndex?{...d,items:d.items.filter((_,j)=>j!==itemIndex)}:d))}>Remove</button></div>)}<button type="button" onClick={()=>addItem(dayIndex)} className="text-xs font-semibold text-brand-saffronDark">+ Add activity</button></div></div>)}</div>
+          </div>
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <button onClick={() => setOpen(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600">Cancel</button>
