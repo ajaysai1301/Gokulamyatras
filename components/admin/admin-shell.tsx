@@ -16,6 +16,7 @@ const NAV = [
   { href: '/admin/customers', label: 'Customers', icon: Users },
   { href: '/admin/checkins', label: 'Check-ins', icon: ScanLine },
   { href: '/admin/enquiries', label: 'Enquiries', icon: Users },
+  { href: '/admin/homepage', label: 'Homepage', icon: LayoutDashboard },
   { href: '/admin/payments', label: 'Payments', icon: TicketCheck },
   { href: '/admin/reports', label: 'Reports', icon: BarChart3 },
 ];

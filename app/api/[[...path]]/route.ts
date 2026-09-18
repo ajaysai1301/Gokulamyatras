@@ -26,6 +26,7 @@ import { login, getStaffFromToken } from '@/lib/services/auth.service';
 import { createBookingSchema, loginSchema, lookupSchema, paymentSchema, yatraPatchSchema } from '@/lib/validation/schemas';
 import { PaymentMethod, BookingSource, UserRole } from '@/lib/domain/types';
 import { TokenPayload } from '@/lib/auth/crypto';
+import { getHomepageContent, saveHomepageDraft, publishHomepage } from '@/lib/repositories/homepage.repository';
 
 function withCORS(res: NextResponse): NextResponse {
   res.headers.set('Cache-Control','no-store');
@@ -78,6 +79,16 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path?: 
 
     if(route==='/payments/status' && method==='GET')return json({isMock:process.env.NODE_ENV!=='production' && process.env.ENABLE_MOCK_PAYMENTS==='true'});
     if(route==='/enquiries' && method==='POST')return json(await submitEnquiry(await readBody(req)),201);
+    if(route==='/site/homepage' && method==='GET') {
+      const record = await getHomepageContent();
+      const wantsDraft = req.nextUrl.searchParams.get('draft') === 'true';
+      if (wantsDraft) {
+        const staff = await requireRole(req, [UserRole.ADMIN]);
+        if (!staff) return json({ error: 'Unauthorized' }, 401);
+        return json({ content: record.draft, version: record.version, publishedAt: record.publishedAt });
+      }
+      return json({ content: record.published, version: record.version, publishedAt: record.publishedAt });
+    }
     // ---------- Auth ----------
     if (route === '/auth/login' && method === 'POST') {
       const body = await readBody(req);
@@ -204,6 +215,9 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path?: 
       if (!staff) return json({ error: 'Unauthorized' }, 401);
 
       if(route==='/admin/enquiries' && method==='GET')return json({enquiries:await listEnquiries()});
+      if(route==='/admin/homepage' && method==='GET') { const record = await getHomepageContent(); return json(record); }
+      if(route==='/admin/homepage/draft' && method==='PUT') { return json(await saveHomepageDraft(await readBody(req), staff.sub)); }
+      if(route==='/admin/homepage/publish' && method==='POST') { return json(await publishHomepage(staff.sub)); }
       if(route==='/admin/payment-config' && method==='GET')return json(await gatewaySummary());
       if(route==='/admin/payment-config' && method==='PUT')return json(await saveGateway(await readBody(req),staff.sub));
       if (route === '/admin/dashboard' && method === 'GET') {

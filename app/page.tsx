@@ -17,6 +17,7 @@ import { OrnamentDivider } from '@/components/site/decorative';
 import { fetchYatras } from '@/lib/api-client';
 import { formatINR, formatDate, durationLabel } from '@/lib/format';
 import { YatraView } from '@/lib/domain/types';
+import { defaultHomepageContent, HomepageContent } from '@/lib/site/homepage-content';
 
 const HERO_IMAGE =
   'https://images.pexels.com/photos/30647799/pexels-photo-30647799.jpeg?auto=compress&cs=tinysrgb&dpr=2&w=1920';
@@ -52,12 +53,14 @@ const FAQS = [
 export default function HomePage() {
   const [yatras, setYatras] = useState<YatraView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [content, setContent] = useState<HomepageContent>(defaultHomepageContent);
 
   useEffect(() => {
     fetchYatras('upcoming')
       .then(setYatras)
       .catch(() => setYatras([]))
       .finally(() => setLoading(false));
+    fetch('/api/site/homepage').then((r) => r.ok ? r.json() : null).then((data) => { if (data?.content) setContent(data.content); }).catch(() => undefined);
   }, []);
 
   const featured = yatras.find((y) => y.featured) ?? yatras[0] ?? null;
@@ -69,39 +72,35 @@ export default function HomePage() {
 
       {/* ================= HERO ================= */}
       <section className="relative flex min-h-[92vh] items-center justify-center overflow-hidden">
-        <img src={HERO_IMAGE} alt="Sacred temple at golden hour" className="absolute inset-0 h-full w-full object-cover" />
+        <img src={content.hero.image || HERO_IMAGE} alt={content.hero.title} className="absolute inset-0 h-full w-full object-cover" />
         <div className="hero-overlay absolute inset-0" />
         <div className="container relative z-10 flex flex-col items-center pt-24 text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-white/90 backdrop-blur animate-fade-up">
-            <Sparkles className="h-3.5 w-3.5 text-brand-marigold" /> Sacred journeys since generations
+            <Sparkles className="h-3.5 w-3.5 text-brand-marigold" /> {content.hero.badge}
           </span>
 
           <h1 className="mt-7 max-w-4xl font-display text-4xl font-semibold leading-[1.05] tracking-tight text-white text-balance sm:text-5xl md:text-6xl lg:text-7xl">
-            Journeys of Faith, <span className="text-brand-marigold">Crafted with Devotion</span>
+            {content.hero.title} <span className="text-brand-marigold">{content.hero.highlight}</span>
           </h1>
 
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-white/85">
-            Premium, thoughtfully organised pilgrimages across India — Tirupati, Kashi, Shirdi, Char Dham and beyond. Travel with comfort, trust and complete peace of mind.
+            {content.hero.description}
           </p>
 
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
-            <Link href="/yatras" className="btn-primary text-base">
-              Explore Upcoming Yatras <ArrowRight className="h-4 w-4" />
+            <Link href={content.hero.primaryHref} className="btn-primary text-base">
+              {content.hero.primaryLabel} <ArrowRight className="h-4 w-4" />
             </Link>
             <Link href="/#how" className="btn-ghost text-base text-white border-white/30 bg-white/10 hover:bg-white/20 hover:border-white/50">
-              How It Works
+              {content.hero.secondaryLabel}
             </Link>
           </div>
 
           <div className="mt-14 grid w-full max-w-2xl grid-cols-3 gap-4 border-t border-white/15 pt-8">
-            {[
-              { k: '10,000+', v: 'Happy pilgrims' },
-              { k: '25+', v: 'Sacred destinations' },
-              { k: '4.9\u2605', v: 'Traveller rating' },
-            ].map((s) => (
-              <div key={s.v} className="text-center">
-                <p className="font-display text-2xl font-semibold text-white sm:text-3xl">{s.k}</p>
-                <p className="mt-1 text-xs text-white/70 sm:text-sm">{s.v}</p>
+            {content.hero.stats.map((s) => (
+              <div key={s.label} className="text-center">
+                <p className="font-display text-2xl font-semibold text-white sm:text-3xl">{s.value}</p>
+                <p className="mt-1 text-xs text-white/70 sm:text-sm">{s.label}</p>
               </div>
             ))}
           </div>
@@ -113,9 +112,9 @@ export default function HomePage() {
         <div className="container">
           <div className="mb-14 flex flex-col items-center">
             <SectionHeading
-              eyebrow="Upcoming Yatras"
-              title={<>Journeys awaiting your <span className="text-brand-saffron">presence</span></>}
-              description="Handpicked pilgrimages departing soon. Reserve your seat before they fill."
+              eyebrow={content.upcoming.eyebrow}
+              title={<>{content.upcoming.title} <span className="text-brand-saffron">{content.upcoming.highlight}</span></>}
+              description={content.upcoming.description}
               ornament
             />
           </div>
@@ -138,7 +137,7 @@ export default function HomePage() {
 
           <div className="mt-12 text-center">
             <Link href="/yatras" className="btn-ghost">
-              View all yatras <ArrowRight className="h-4 w-4" />
+              {content.upcoming.viewAllLabel} <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
         </div>
@@ -157,13 +156,13 @@ export default function HomePage() {
                 <img src={featured.heroImage} alt={featured.name} className="aspect-[4/3] w-full object-cover" />
               </div>
               <div className="absolute -bottom-6 -right-2 rounded-2xl bg-brand-saffron px-6 py-4 shadow-premium sm:-right-6">
-                <p className="text-xs uppercase tracking-wide text-white/80">From</p>
+                <p className="text-xs uppercase tracking-wide text-white/80">{content.featured.fromLabel}</p>
                 <p className="font-display text-2xl font-semibold text-white">{formatINR(featured.price)}</p>
               </div>
             </motion.div>
 
             <div className="order-1 lg:order-2">
-              <span className="eyebrow text-brand-marigold">Featured Yatra</span>
+              <span className="eyebrow text-brand-marigold">{content.featured.eyebrow}</span>
               <h2 className="mt-4 font-display text-3xl font-semibold leading-tight text-white sm:text-4xl md:text-5xl">
                 {featured.name}
               </h2>
@@ -173,11 +172,11 @@ export default function HomePage() {
                 <div className="flex items-center gap-3"><CalendarDays className="h-5 w-5 text-brand-marigold" /><span className="text-sm text-brand-cream/85">{formatDate(featured.startDate)}</span></div>
                 <div className="flex items-center gap-3"><Clock className="h-5 w-5 text-brand-marigold" /><span className="text-sm text-brand-cream/85">{durationLabel(featured.durationDays, featured.durationNights)}</span></div>
                 <div className="flex items-center gap-3"><MapPin className="h-5 w-5 text-brand-marigold" /><span className="text-sm text-brand-cream/85">{featured.startingPoint}</span></div>
-                <div className="flex items-center gap-3"><Users className="h-5 w-5 text-brand-marigold" /><span className="text-sm text-brand-cream/85">{featured.availability.available} seats left</span></div>
+                <div className="flex items-center gap-3"><Users className="h-5 w-5 text-brand-marigold" /><span className="text-sm text-brand-cream/85">{featured.availability.available} {content.featured.seatsLabel}</span></div>
               </div>
 
               <Link href={`/yatras/${featured.slug}`} className="btn-primary mt-9">
-                Book Your Seat <ArrowRight className="h-4 w-4" />
+                {content.featured.buttonLabel} <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
           </div>
@@ -189,13 +188,13 @@ export default function HomePage() {
         <div className="container">
           <div className="mb-14 flex flex-col items-center">
             <SectionHeading
-              eyebrow="Why GokulamYatras"
-              title={<>Travel with faith, <span className="text-brand-saffron">arrive with peace</span></>}
-              description="We handle every worldly detail so you can focus entirely on your devotion."
+              eyebrow={content.why.eyebrow}
+              title={<>{content.why.title} <span className="text-brand-saffron">{content.why.highlight}</span></>}
+              description={content.why.description}
             />
           </div>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {WHY.map((f, i) => (
+            {content.why.items.map((f, i) => { const Icon = WHY[i % WHY.length].icon; return (
               <motion.div
                 key={f.title}
                 initial={{ opacity: 0, y: 22 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-60px' }}
@@ -203,12 +202,12 @@ export default function HomePage() {
                 className="card-premium p-7 transition-shadow duration-300 hover:shadow-soft"
               >
                 <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-saffron/12 text-brand-saffronDark">
-                  <f.icon className="h-6 w-6" />
+                  <Icon className="h-6 w-6" />
                 </div>
                 <h3 className="heading-serif text-lg">{f.title}</h3>
                 <p className="mt-2.5 text-sm leading-relaxed text-brand-muted">{f.desc}</p>
               </motion.div>
-            ))}
+            )})}
           </div>
         </div>
       </section>
@@ -217,10 +216,10 @@ export default function HomePage() {
       <section id="how" className="relative overflow-hidden bg-brand-sand/40 py-20 md:py-28">
         <div className="container">
           <div className="mb-16 flex flex-col items-center">
-            <SectionHeading eyebrow="How it works" title="Your pilgrimage, in four simple steps" ornament />
+            <SectionHeading eyebrow={content.how.eyebrow} title={content.how.title} ornament />
           </div>
           <div className="relative grid gap-8 md:grid-cols-2 lg:grid-cols-4">
-            {STEPS.map((s, i) => (
+            {content.how.items.map((s, i) => { const Icon = STEPS[i % STEPS.length].icon; return (
               <motion.div
                 key={s.title}
                 initial={{ opacity: 0, y: 22 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-60px' }}
@@ -228,13 +227,13 @@ export default function HomePage() {
                 className="relative text-center"
               >
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-brand-gold/40 bg-brand-ivory shadow-soft">
-                  <s.icon className="h-7 w-7 text-brand-saffron" />
+                  <Icon className="h-7 w-7 text-brand-saffron" />
                 </div>
                 <span className="mt-5 block font-display text-sm font-semibold text-brand-gold">0{i + 1}</span>
                 <h3 className="mt-1 heading-serif text-lg">{s.title}</h3>
                 <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-brand-muted">{s.desc}</p>
               </motion.div>
-            ))}
+            )})}
           </div>
         </div>
       </section>
@@ -244,9 +243,9 @@ export default function HomePage() {
         <div className="container">
           <div className="mb-14 flex flex-col items-center">
             <SectionHeading
-              eyebrow="Sacred destinations"
-              title={<>Where devotion <span className="text-brand-saffron">meets the divine</span></>}
-              description="From the hills of Tirumala to the ghats of Kashi — explore the destinations our pilgrims cherish."
+              eyebrow={content.destinations.eyebrow}
+              title={<>{content.destinations.title} <span className="text-brand-saffron">{content.destinations.highlight}</span></>}
+              description={content.destinations.description}
             />
           </div>
           {!loading && yatras.length > 0 && (
@@ -277,10 +276,10 @@ export default function HomePage() {
         <div className="paper-texture absolute inset-0 opacity-20" aria-hidden="true" />
         <div className="container relative">
           <div className="mb-14 flex flex-col items-center">
-            <SectionHeading eyebrow="Blessed voices" title={<span className="text-white">Words from our pilgrims</span>} dark />
+            <SectionHeading eyebrow={content.testimonials.eyebrow} title={<span className="text-white">{content.testimonials.title}</span>} dark />
           </div>
           <div className="grid gap-6 md:grid-cols-3">
-            {TESTIMONIALS.map((t, i) => (
+            {content.testimonials.items.map((t, i) => (
               <motion.figure
                 key={t.name}
                 initial={{ opacity: 0, y: 22 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
@@ -305,10 +304,10 @@ export default function HomePage() {
       <section id="faq" className="py-20 md:py-28">
         <div className="container max-w-3xl">
           <div className="mb-12 flex flex-col items-center">
-            <SectionHeading eyebrow="Good to know" title="Frequently asked questions" ornament />
+            <SectionHeading eyebrow={content.faq.eyebrow} title={content.faq.title} ornament />
           </div>
           <Accordion type="single" collapsible className="w-full">
-            {FAQS.map((f, i) => (
+            {content.faq.items.map((f, i) => (
               <AccordionItem key={i} value={`item-${i}`} className="border-brand-sand">
                 <AccordionTrigger className="text-left font-display text-lg font-medium hover:text-brand-saffronDark hover:no-underline">
                   {f.q}
@@ -326,17 +325,13 @@ export default function HomePage() {
           <div className="overflow-hidden rounded-3xl bg-brand-ink shadow-premium">
             <div className="grid lg:grid-cols-2">
               <div className="p-10 md:p-14">
-                <span className="eyebrow text-brand-marigold">Get in touch</span>
-                <h2 className="mt-4 font-display text-3xl font-semibold text-white sm:text-4xl">
-                  Planning a pilgrimage? Let us help.
-                </h2>
-                <p className="mt-4 max-w-md leading-relaxed text-brand-cream/70">
-                  Speak with our team for group bookings, custom yatras, or any questions about upcoming journeys.
-                </p>
+                <span className="eyebrow text-brand-marigold">{content.contact.eyebrow}</span>
+                <h2 className="mt-4 font-display text-3xl font-semibold text-white sm:text-4xl">{content.contact.title}</h2>
+                <p className="mt-4 max-w-md leading-relaxed text-brand-cream/70">{content.contact.description}</p>
                 <div className="mt-8 space-y-4 text-brand-cream/85">
-                  <p className="flex items-center gap-3"><Phone className="h-5 w-5 text-brand-marigold" /> +91 98765 43210</p>
-                  <p className="flex items-center gap-3"><Mail className="h-5 w-5 text-brand-marigold" /> care@gokulamyatras.in</p>
-                  <p className="flex items-center gap-3"><MapPin className="h-5 w-5 text-brand-marigold" /> Vijayawada, Andhra Pradesh</p>
+                  <p className="flex items-center gap-3"><Phone className="h-5 w-5 text-brand-marigold" /> {content.contact.phone}</p>
+                  <p className="flex items-center gap-3"><Mail className="h-5 w-5 text-brand-marigold" /> {content.contact.email}</p>
+                  <p className="flex items-center gap-3"><MapPin className="h-5 w-5 text-brand-marigold" /> {content.contact.address}</p>
                 </div>
               </div>
 
@@ -363,7 +358,7 @@ export default function HomePage() {
                     <label className="mb-1.5 block text-sm font-medium text-brand-ink" htmlFor="c-msg">Message</label>
                     <textarea name="message" id="c-msg" rows={4} className="w-full rounded-xl border border-brand-sand bg-white px-4 py-3 text-sm outline-none focus:border-brand-saffron focus:ring-2 focus:ring-brand-saffron/20" placeholder="Tell us about your yatra plans" />
                   </div>
-                  <button type="submit" className="btn-primary w-full">Send enquiry <ArrowRight className="h-4 w-4" /></button>
+                  <button type="submit" className="btn-primary w-full">{content.contact.formButtonLabel} <ArrowRight className="h-4 w-4" /></button>
                 </form>
               </div>
             </div>

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Menu, ArrowRight } from 'lucide-react';
+import { Menu, ArrowRight, LogIn } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import { Wordmark } from '@/components/site/decorative';
 
@@ -58,6 +58,7 @@ export function Navbar({ variant = 'solid' }: { variant?: 'overlay' | 'solid' })
           <Link href="/yatras" className="btn-primary hidden sm:inline-flex">
             Explore Yatras <ArrowRight className="h-4 w-4" />
           </Link>
+          <Link href="/signin" className={`hidden items-center gap-1.5 text-sm font-semibold sm:inline-flex ${isTransparent ? 'text-white' : 'text-brand-ink'}`}><LogIn className="h-4 w-4" /> Sign in</Link>
 
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
@@ -90,6 +91,7 @@ export function Navbar({ variant = 'solid' }: { variant?: 'overlay' | 'solid' })
               <Link href="/yatras" onClick={() => setOpen(false)} className="btn-primary mt-6 w-full">
                 Explore Yatras <ArrowRight className="h-4 w-4" />
               </Link>
+              <Link href="/signin" onClick={() => setOpen(false)} className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-brand-sand px-4 py-3 font-semibold text-brand-ink"><LogIn className="h-4 w-4" /> Sign in</Link>
             </SheetContent>
           </Sheet>
         </div>
