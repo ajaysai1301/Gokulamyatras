@@ -7,16 +7,7 @@ export async function upsertCustomerByMobile(input: PrimaryCustomerInput): Promi
   const repo = getCustomerRepository();
   const existing = await repo.findByMobile(input.mobile);
   const now = new Date().toISOString();
-  if (existing) {
-    const updated = await repo.update(existing.id, {
-      fullName: input.fullName || existing.fullName,
-      email: input.email || existing.email,
-      address: input.address || existing.address,
-      emergencyContactName: input.emergencyContactName || existing.emergencyContactName,
-      emergencyContactPhone: input.emergencyContactPhone || existing.emergencyContactPhone,
-    });
-    return updated || existing;
-  }
+  if (existing) return existing;
   const customer: Customer = {
     id: uuidv4(),
     fullName: input.fullName,

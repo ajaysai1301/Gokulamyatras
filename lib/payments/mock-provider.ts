@@ -7,6 +7,7 @@ import { PaymentStatus } from '@/lib/domain/types';
 import {
   PaymentProvider, CreateOrderInput, PaymentOrder, VerifyPaymentInput, VerifyPaymentResult,
 } from '@/lib/payments/provider';
+import { RazorpayPaymentProvider } from '@/lib/payments/razorpay-provider';
 
 class MockPaymentProvider implements PaymentProvider {
   readonly name = 'mock';
@@ -35,10 +36,16 @@ class MockPaymentProvider implements PaymentProvider {
   }
 }
 
-let provider: PaymentProvider | null = null;
+let mockProvider: PaymentProvider | null = null;
+let razorpayProvider: PaymentProvider | null = null;
 
-/** Factory — swap the implementation here to plug in Razorpay later. */
+/** Production fails closed unless live Razorpay credentials are present. */
 export function getPaymentProvider(): PaymentProvider {
-  if (!provider) provider = new MockPaymentProvider();
-  return provider;
+  if (process.env.ENABLE_MOCK_PAYMENTS === 'true') {
+    if (process.env.NODE_ENV === 'production') throw new Error('Mock payments are disabled in production');
+    if (!mockProvider) mockProvider = new MockPaymentProvider();
+    return mockProvider;
+  }
+  if (!razorpayProvider) razorpayProvider = new RazorpayPaymentProvider();
+  return razorpayProvider;
 }

@@ -10,6 +10,7 @@ const SEED_USERS: Array<{ email: string; name: string; role: UserRole; password:
 ];
 
 export async function ensureSeededUsers(): Promise<void> {
+  if (process.env.ENABLE_DEMO_SEED !== 'true' || process.env.NODE_ENV === 'production') return;
   const repo = getUserRepository();
   if ((await repo.count()) > 0) return;
   const users: StaffUser[] = SEED_USERS.map((u) => {
@@ -45,6 +46,10 @@ export async function login(email: string, password: string): Promise<LoginResul
   return { token, role: user.role, name: user.name, email: user.email };
 }
 
-export function getStaffFromToken(token?: string | null): TokenPayload | null {
-  return verifyToken(token);
+export async function getStaffFromToken(token?: string | null): Promise<TokenPayload | null> {
+  const payload = verifyToken(token);
+  if (!payload) return null;
+  const user = await getUserRepository().findById(payload.sub);
+  if (!user?.active || user.role !== payload.role) return null;
+  return { ...payload, name:user.name, email:user.email };
 }

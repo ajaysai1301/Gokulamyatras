@@ -1,3 +1,6 @@
+import { getUnitOfWork } from '@/lib/repositories/unit-of-work';
+import { yatraPatchSchema } from '@/lib/validation/schemas';
+import { getTerms } from '@/lib/services/terms.service';
 /**
  * Yatra service — application/business logic.
  * ---------------------------------------------------------------------------
@@ -32,6 +35,7 @@ function byStartDateAsc(a: Yatra, b: Yatra): number {
 /** Seeds demo yatras only when the collection is empty (idempotent). */
 export async function ensureSeeded(): Promise<void> {
   const repo = getYatraRepository();
+  if (process.env.ENABLE_DEMO_SEED !== 'true' || process.env.NODE_ENV === 'production') return;
   const count = await repo.count();
   if (count === 0) {
     await repo.insertMany(seedYatras());
@@ -86,6 +90,7 @@ export async function getYatraViewById(id: string): Promise<YatraView | null> {
 }
 
 export async function createYatra(input: Partial<Yatra>): Promise<Yatra> {
+  input=yatraPatchSchema.parse(input);
   const repo = getYatraRepository();
   const now = new Date().toISOString();
   const name = input.name || 'Untitled Yatra';
@@ -122,16 +127,27 @@ export async function createYatra(input: Partial<Yatra>): Promise<Yatra> {
     createdAt: now,
     updatedAt: now,
   };
-  return repo.create(yatra);
+  validateYatra(yatra);
+  return getUnitOfWork().run(async()=>{await repo.create(yatra);await getTerms(yatra);return yatra;});
 }
 
 /** Never mutates booked/capacity accounting fields via arbitrary patch. */
 export async function updateYatra(id: string, patch: Partial<Yatra>): Promise<Yatra | null> {
-  const { id: _id, booked: _b, createdAt: _c, ...safe } = patch;
-  void _id; void _b; void _c;
-  return getYatraRepository().update(id, safe);
+  const safe=yatraPatchSchema.parse(patch);
+  return getUnitOfWork().run(async()=>{
+   const repo=getYatraRepository();const old=await repo.findById(id);if(!old)return null;
+   const next={...old,...safe};validateYatra(next);
+   if(next.tcPdfUrl!==old.tcPdfUrl) throw new Error('External terms replacement is not supported; retain the versioned terms endpoint');
+   await getTerms(old);
+   const updated=await repo.update(id,safe);await getTerms(next);return updated;
+  });
 }
 
 export async function setPublished(id: string, published: boolean): Promise<Yatra | null> {
-  return getYatraRepository().update(id, { status: published ? YatraStatus.PUBLISHED : YatraStatus.DRAFT });
+  return updateYatra(id, { status: published ? YatraStatus.PUBLISHED : YatraStatus.DRAFT });
+}
+
+function validateYatra(y:Yatra) {
+ if(Date.parse(y.endDate)<Date.parse(y.startDate) || y.capacity<y.booked || !y.name.trim()) throw new Error('Invalid dates, name or capacity below reserved seats');
+ if(y.tcPdfUrl && y.tcPdfUrl!==`/api/yatras/${y.slug}/terms`) throw new Error('Terms must use the versioned local endpoint');
 }

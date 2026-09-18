@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -35,6 +35,7 @@ export default function BookYatraPage() {
   const [travellers, setTravellers] = useState<TravellerForm[]>([emptyTraveller()]);
   const [agreed, setAgreed] = useState(false);
 
+  const requestKey=useRef<string | null>(null);
   const [bookingRef, setBookingRef] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -75,22 +76,27 @@ export default function BookYatraPage() {
       let ref = bookingRef;
       let ord = orderId;
       if (!ref) {
+        requestKey.current ||= crypto.randomUUID();
         const bRes = await fetch('/api/bookings', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            requestKey:requestKey.current,
             yatraSlug: yatra.slug,
             primaryCustomer: primary,
             travellers: travellers.map((t) => ({ ...t, age: Number(t.age) })),
-            acceptedTerms: true,
+            acceptedTerms: agreed,
+            termsVersion: yatra.tcVersion,
           }),
         });
         const bData = await bRes.json();
         if (!bRes.ok) { toast.error(bData.error || 'Could not create booking'); setProcessing(false); return; }
         ref = bData.booking.reference;
         setBookingRef(ref);
+      }
+      if(!ord) {
         const oRes = await fetch('/api/payments/order', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bookingReference: ref }),
+          body: JSON.stringify({ bookingReference: ref, mobile: primary.mobile }),
         });
         const oData = await oRes.json();
         if (!oRes.ok) { toast.error('Could not initiate payment'); setProcessing(false); return; }
@@ -99,9 +105,10 @@ export default function BookYatraPage() {
       }
       const vRes = await fetch('/api/payments/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingReference: ref, orderId: ord, simulate: outcome }),
+        body: JSON.stringify({ bookingReference: ref, mobile: primary.mobile, orderId: ord, simulate: outcome }),
       });
       const vData = await vRes.json();
+      if(!vRes.ok) {toast.error(vData.error || 'Payment could not be verified');return;}
       const status = vData?.result?.status;
       if (status === 'PAID') {
         const lRes = await fetch('/api/bookings/lookup', {
@@ -116,7 +123,7 @@ export default function BookYatraPage() {
         toast.warning('Payment is pending. You can retry once it settles.');
       } else {
         toast.error('Payment failed. Please try again.');
-        setBookingRef(null); setOrderId(null); // booking was cancelled + seats released
+        setBookingRef(null); setOrderId(null); requestKey.current=null; // booking was cancelled + seats released
       }
     } catch {
       toast.error('Something went wrong. Please try again.');
@@ -247,7 +254,7 @@ export default function BookYatraPage() {
               <section className="card-premium p-6 sm:p-8">
                 <h2 className="heading-serif text-2xl">Terms &amp; Conditions</h2>
                 <p className="mt-2 text-sm text-brand-muted">Please review the Terms &amp; Conditions specific to this yatra (Version {yatra.tcVersion}).</p>
-                <a href={`/api/yatras/${yatra.slug}/terms`} target="_blank" rel="noopener noreferrer" className="btn-ghost mt-5"><FileText className="h-4 w-4" /> View Terms &amp; Conditions PDF</a>
+                <a href={`/api/yatras/${yatra.slug}/terms?version=${encodeURIComponent(yatra.tcVersion)}`} target="_blank" rel="noopener noreferrer" className="btn-ghost mt-5"><FileText className="h-4 w-4" /> View / Print Terms &amp; Conditions</a>
                 <label className="mt-7 flex cursor-pointer items-start gap-3 rounded-2xl border border-brand-sand bg-brand-cream/50 p-4">
                   <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-1 h-5 w-5 accent-brand-saffron" />
                   <span className="text-sm text-brand-ink">I have read, understood and agree to the Terms &amp; Conditions for this yatra.</span>

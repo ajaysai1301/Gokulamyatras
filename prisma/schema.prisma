@@ -32,6 +32,9 @@ enum YatraStatus {
 }
 
 enum BookingStatus {
+  PAYMENT_PENDING
+  EXPIRED
+  REFUNDED
   PENDING
   CONFIRMED
   CANCELLED
@@ -51,6 +54,7 @@ enum PaymentStatus {
 }
 
 enum PaymentMethod {
+  MOCK
   RAZORPAY
   CASH
   UPI
@@ -67,6 +71,7 @@ enum Gender {
 model User {
   id           String    @id @default(uuid())
   email        String    @unique
+  passwordSalt String
   passwordHash String
   name         String
   role         UserRole  @default(COORDINATOR)
@@ -85,7 +90,8 @@ model Customer {
   mobile           String    @unique
   email            String?
   address          String?
-  emergencyContact String?
+  emergencyContactName String?
+  emergencyContactPhone String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -120,6 +126,8 @@ model Yatra {
   importantInfo    String[]
   featured         Boolean      @default(false)
   status           YatraStatus  @default(DRAFT)
+  tcVersion String
+  tcPdfUrl String
   bookingOpensAt   DateTime?
   bookingClosesAt  DateTime?
   createdAt        DateTime     @default(now())
@@ -137,7 +145,9 @@ model TermsAndConditions {
   id        String   @id @default(uuid())
   yatraId   String
   version   String
-  pdfUrl    String
+  html String
+  contentHash String
+  pdfUrl    String?
   createdAt DateTime @default(now())
 
   yatra     Yatra    @relation(fields: [yatraId], references: [id])
@@ -147,8 +157,20 @@ model TermsAndConditions {
 }
 
 model Booking {
+  requestKey String? @unique
+  requestHash String?
   id            String         @id @default(uuid())
   reference     String         @unique // human-readable e.g. GY-2026-0001
+  customerSnapshot Json
+  expiresAt DateTime
+  yatraSlug String
+  yatraName String
+  yatraStartDate DateTime
+  reportingLocation String
+  reportingTime String
+  pricePerTraveller Int
+  paymentStatus PaymentStatus @default(PENDING)
+  tcVersion String
   customerId    String
   yatraId       String
   status        BookingStatus  @default(PENDING)
@@ -189,13 +211,17 @@ model Traveller {
 model TermsConsent {
   id         String   @id @default(uuid())
   bookingId  String   @unique
-  termsId    String
+  yatraId String
+  termsHtml String
+  contentHash String
+  recordedBy String?
+  termsId    String?
   version    String
   agreed     Boolean
   agreedAt   DateTime @default(now())
 
   booking    Booking  @relation(fields: [bookingId], references: [id])
-  terms      TermsAndConditions @relation(fields: [termsId], references: [id])
+  terms      TermsAndConditions? @relation(fields: [termsId], references: [id])
 }
 
 /// Payment history kept separate from bookings; records are never mutated in place.
@@ -205,15 +231,16 @@ model Payment {
   amount             Int            // whole INR
   method             PaymentMethod
   status             PaymentStatus  @default(PENDING)
-  razorpayOrderId    String?        @unique
-  razorpayPaymentId  String?        @unique
-  razorpaySignature  String?
-  notes              String?
+  providerOrderId String?
+  providerPaymentId String? @unique
+  providerSignature String?
+  note String?
   createdAt          DateTime       @default(now())
 
   booking            Booking        @relation(fields: [bookingId], references: [id])
 
   @@index([bookingId, status])
+  @@unique([providerOrderId, status])
 }
 
 /// QR ticket — stores only a secure opaque token, never personal data.
@@ -230,6 +257,7 @@ model CheckIn {
   id            String   @id @default(uuid())
   bookingId     String   @unique
   yatraId       String
+  coordinatorName String
   coordinatorId String
   checkedInAt   DateTime @default(now())
   travellerCount Int
@@ -253,4 +281,18 @@ model AuditLog {
   user      User?    @relation(fields: [userId], references: [id])
 
   @@index([entity, entityId])
+}
+
+/// One encrypted, admin-managed payment gateway configuration. Secrets are write-only.
+model PaymentGatewayConfig {
+  id                    String   @id @default("razorpay")
+  provider              String   @unique @default("razorpay")
+  displayName           String   @default("Razorpay")
+  keyId                 String
+  encryptedKeySecret    String
+  encryptedWebhookSecret String
+  testMode              Boolean  @default(true)
+  enabled               Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
