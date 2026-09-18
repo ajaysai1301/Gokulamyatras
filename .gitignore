@@ -90,3 +90,6 @@ node_modules/@next/swc-linux-arm64-gnu/next-swc.linux-arm64-gnu.node
 
 # Reproducible npm lock is tracked; local env remains ignored.
 !.env.example
+
+# Temporary npm cache used by sandboxed installs
+.npm-cache/

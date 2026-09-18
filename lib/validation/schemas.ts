@@ -50,4 +50,4 @@ export const yatraPatchSchema=z.object({
  tcVersion:z.string().trim().min(1).max(40).optional(),tcPdfUrl:url.optional(),status:z.nativeEnum(YatraStatus).optional(),featured:z.boolean().optional()
 }).strict();
 export const lookupSchema=z.object({reference:z.string().regex(/^GMY-\d{4}-\d{5,}$/),mobile:mobileSchema});
-export const paymentSchema=z.object({bookingReference:z.string().regex(/^GMY-\d{4}-\d{5,}$/),mobile:mobileSchema,orderId:z.string().max(100).optional(),simulate:z.enum(['success','failed','pending']).optional()});
+export const paymentSchema=z.object({bookingReference:z.string().regex(/^GMY-\d{4}-\d{5,}$/),mobile:mobileSchema,orderId:z.string().max(100).optional(),simulate:z.enum(['success','failed','pending']).optional(),providerPaymentId:z.string().max(128).optional(),providerSignature:z.string().regex(/^[a-f0-9]{64}$/i).optional()});

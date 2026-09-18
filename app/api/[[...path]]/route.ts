@@ -158,6 +158,8 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path?: 
           bookingReference: input.bookingReference,
           orderId: input.orderId,
           simulate: input.simulate,
+          providerPaymentId: input.providerPaymentId,
+          providerSignature: input.providerSignature,
         });
         return json({ result: { status: result.status, booking: result.booking } });
       } catch (e) {
