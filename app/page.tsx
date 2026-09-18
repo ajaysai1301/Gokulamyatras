@@ -342,26 +342,26 @@ export default function HomePage() {
 
               <div className="bg-brand-ivory p-10 md:p-14">
                 <form
-                  onSubmit={(e) => { e.preventDefault(); toast.success('Thank you! Our team will reach out to you shortly.'); (e.target as HTMLFormElement).reset(); }}
+                  onSubmit={async(e) => { e.preventDefault();const form=e.currentTarget;const button=form.querySelector('button');if(button)button.disabled=true;try{const values=new FormData(form);const res=await fetch('/api/enquiries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(values))});if(!res.ok)throw new Error('Please check your details and try again.');toast.success('Your enquiry has been saved for our team.');form.reset();}catch(e){toast.error(e instanceof Error?e.message:'Could not send enquiry');}finally{if(button)button.disabled=false;} }}
                   className="space-y-4"
                 >
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-brand-ink" htmlFor="c-name">Full name</label>
-                    <input id="c-name" required className="w-full rounded-xl border border-brand-sand bg-white px-4 py-3 text-sm outline-none focus:border-brand-saffron focus:ring-2 focus:ring-brand-saffron/20" placeholder="Your name" />
+                    <input name="fullName" id="c-name" required className="w-full rounded-xl border border-brand-sand bg-white px-4 py-3 text-sm outline-none focus:border-brand-saffron focus:ring-2 focus:ring-brand-saffron/20" placeholder="Your name" />
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
                       <label className="mb-1.5 block text-sm font-medium text-brand-ink" htmlFor="c-phone">Mobile</label>
-                      <input id="c-phone" required className="w-full rounded-xl border border-brand-sand bg-white px-4 py-3 text-sm outline-none focus:border-brand-saffron focus:ring-2 focus:ring-brand-saffron/20" placeholder="+91" />
+                      <input name="mobile" id="c-phone" required className="w-full rounded-xl border border-brand-sand bg-white px-4 py-3 text-sm outline-none focus:border-brand-saffron focus:ring-2 focus:ring-brand-saffron/20" placeholder="+91" />
                     </div>
                     <div>
                       <label className="mb-1.5 block text-sm font-medium text-brand-ink" htmlFor="c-email">Email</label>
-                      <input id="c-email" type="email" className="w-full rounded-xl border border-brand-sand bg-white px-4 py-3 text-sm outline-none focus:border-brand-saffron focus:ring-2 focus:ring-brand-saffron/20" placeholder="you@email.com" />
+                      <input name="email" id="c-email" type="email" className="w-full rounded-xl border border-brand-sand bg-white px-4 py-3 text-sm outline-none focus:border-brand-saffron focus:ring-2 focus:ring-brand-saffron/20" placeholder="you@email.com" />
                     </div>
                   </div>
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-brand-ink" htmlFor="c-msg">Message</label>
-                    <textarea id="c-msg" rows={4} className="w-full rounded-xl border border-brand-sand bg-white px-4 py-3 text-sm outline-none focus:border-brand-saffron focus:ring-2 focus:ring-brand-saffron/20" placeholder="Tell us about your yatra plans" />
+                    <textarea name="message" id="c-msg" rows={4} className="w-full rounded-xl border border-brand-sand bg-white px-4 py-3 text-sm outline-none focus:border-brand-saffron focus:ring-2 focus:ring-brand-saffron/20" placeholder="Tell us about your yatra plans" />
                   </div>
                   <button type="submit" className="btn-primary w-full">Send enquiry <ArrowRight className="h-4 w-4" /></button>
                 </form>

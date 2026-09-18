@@ -1,7 +1,10 @@
 'use client';
+import type { PublicBookingView } from '@/lib/services/public-booking';
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import Script from 'next/script';
+import {openCheckout,CheckoutResult} from '@/lib/razorpay-checkout';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -13,7 +16,7 @@ import { Footer } from '@/components/site/footer';
 import { Ticket } from '@/components/site/ticket';
 import { fetchYatra } from '@/lib/api-client';
 import { formatINR, formatDate, durationLabel } from '@/lib/format';
-import { YatraView, Gender, BookingView } from '@/lib/domain/types';
+import { YatraView, Gender } from '@/lib/domain/types';
 
 type TravellerForm = {
   fullName: string; age: string; gender: Gender;
@@ -38,12 +41,14 @@ export default function BookYatraPage() {
   const requestKey=useRef<string | null>(null);
   const [bookingRef, setBookingRef] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [mock,setMock]=useState(false);
   const [processing, setProcessing] = useState(false);
-  const [confirmed, setConfirmed] = useState<BookingView | null>(null);
+  const [confirmed, setConfirmed] = useState<PublicBookingView | null>(null);
 
   useEffect(() => {
     if (!slug) return;
-    fetchYatra(slug).then(setYatra).finally(() => setLoading(false));
+    fetch('/api/payments/status').then(r=>r.json()).then(d=>setMock(d.isMock===true)).catch(()=>{});
+    fetchYatra(slug).then(setYatra).catch(()=>setYatra(null)).finally(() => setLoading(false));
   }, [slug]);
 
   const count = travellers.length;
@@ -93,7 +98,8 @@ export default function BookYatraPage() {
         ref = bData.booking.reference;
         setBookingRef(ref);
       }
-      if(!ord) {
+      let proof:CheckoutResult|undefined;
+      {
         const oRes = await fetch('/api/payments/order', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ bookingReference: ref, mobile: primary.mobile }),
@@ -102,15 +108,16 @@ export default function BookYatraPage() {
         if (!oRes.ok) { toast.error('Could not initiate payment'); setProcessing(false); return; }
         ord = oData.order.orderId;
         setOrderId(ord);
+        if(!oData.order.isMock)proof=await openCheckout(oData.order,primary);
       }
       const vRes = await fetch('/api/payments/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingReference: ref, mobile: primary.mobile, orderId: ord, simulate: outcome }),
+        body: JSON.stringify({ bookingReference: ref, mobile: primary.mobile, orderId: ord, simulate: mock?outcome:undefined, providerPaymentId:proof?.razorpay_payment_id, providerSignature:proof?.razorpay_signature }),
       });
       const vData = await vRes.json();
       if(!vRes.ok) {toast.error(vData.error || 'Payment could not be verified');return;}
       const status = vData?.result?.status;
-      if (status === 'PAID') {
+      if (status === 'PAID' && vData.result.booking.status==='CONFIRMED') {
         const lRes = await fetch('/api/bookings/lookup', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ reference: ref, mobile: primary.mobile }),
@@ -119,6 +126,8 @@ export default function BookYatraPage() {
         setConfirmed(lData.booking);
         setStep(4);
         toast.success('Payment successful — your yatra is confirmed!');
+      } else if(status==='PAID'){
+        toast.warning('Payment received after the seat hold ended. Contact support with booking '+ref+' for reconciliation.');
       } else if (status === 'PENDING') {
         toast.warning('Payment is pending. You can retry once it settles.');
       } else {
@@ -264,17 +273,17 @@ export default function BookYatraPage() {
 
             {step === 3 && (
               <section className="card-premium p-6 sm:p-8">
-                <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-brand-marigold/20 px-3 py-1.5 text-xs font-semibold text-brand-saffronDark"><AlertTriangle className="h-3.5 w-3.5" /> Mock payment (development mode)</div>
+                <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-brand-marigold/20 px-3 py-1.5 text-xs font-semibold text-brand-saffronDark"><AlertTriangle className="h-3.5 w-3.5" /> {mock?'Mock payment (development mode)':'Secure Razorpay checkout'}</div>
                 <h2 className="heading-serif text-2xl">Payment</h2>
                 <div className="mt-6 flex items-center justify-between rounded-2xl bg-brand-ink px-6 py-5 text-brand-cream">
                   <span className="text-sm text-brand-cream/70">Amount payable</span>
                   <span className="font-display text-3xl font-semibold text-white">{formatINR(total)}</span>
                 </div>
-                <p className="mt-4 text-sm text-brand-muted">This is a simulated payment. Choose an outcome to test the flow. Razorpay will be plugged in later without changing this booking.</p>
+                <p className="mt-4 text-sm text-brand-muted">{mock?'Development simulation: choose an outcome.':'Pay securely with Razorpay. Your ticket is issued after the server confirms payment.'}</p>
                 <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                  <button disabled={processing} onClick={() => startPayment('success')} className="btn-primary justify-center disabled:opacity-60">{processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Success</button>
-                  <button disabled={processing} onClick={() => startPayment('failed')} className="inline-flex items-center justify-center gap-2 rounded-full border border-brand-maroon/40 px-5 py-3.5 text-sm font-semibold text-brand-maroon disabled:opacity-60">Failed</button>
-                  <button disabled={processing} onClick={() => startPayment('pending')} className="inline-flex items-center justify-center gap-2 rounded-full border border-brand-gold/50 px-5 py-3.5 text-sm font-semibold text-brand-saffronDark disabled:opacity-60">Pending</button>
+                  <button disabled={processing} onClick={() => startPayment('success')} className="btn-primary justify-center disabled:opacity-60">{processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {mock?'Success':'Pay securely'}</button>
+                  {mock && <button disabled={processing} onClick={() => startPayment('failed')} className="inline-flex items-center justify-center gap-2 rounded-full border border-brand-maroon/40 px-5 py-3.5 text-sm font-semibold text-brand-maroon disabled:opacity-60">Failed</button>}
+                  {mock && <button disabled={processing} onClick={() => startPayment('pending')} className="inline-flex items-center justify-center gap-2 rounded-full border border-brand-gold/50 px-5 py-3.5 text-sm font-semibold text-brand-saffronDark disabled:opacity-60">Pending</button>}
                 </div>
               </section>
             )}

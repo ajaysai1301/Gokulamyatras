@@ -4,15 +4,16 @@ import { v4 as uuidv4 } from 'uuid';
 import { getTicketRepository } from '@/lib/repositories/ticket.repository';
 import { getBookingRepository } from '@/lib/repositories/booking.repository';
 import { getCheckInRepository } from '@/lib/repositories/checkin.repository';
-import { BookingStatus, CheckIn } from '@/lib/domain/types';
+import { BookingStatus, PaymentStatus, CheckIn } from '@/lib/domain/types';
 import { getBookingView } from '@/lib/services/booking.service';
 import { TokenPayload } from '@/lib/auth/crypto';
 
-export async function validateToken(token: string) {
+export async function validateToken(token: string, selectedYatraId?: string) {
   const ticket = await getTicketRepository().findByToken(token);
   if (!ticket) return { valid: false as const, reason: 'INVALID' as const };
   const booking = await getBookingRepository().findById(ticket.bookingId);
-  if (!booking || booking.status!==BookingStatus.CONFIRMED) return { valid: false as const, reason: 'INVALID' as const };
+  if (!booking || (booking.status!==BookingStatus.CONFIRMED || booking.paymentStatus!==PaymentStatus.PAID)) return { valid: false as const, reason: 'INVALID' as const };
+  if(selectedYatraId && booking.yatraId!==selectedYatraId)return {valid:false as const,reason:'WRONG_YATRA' as const};
   const view = await getBookingView(booking.reference);
   const existingCheckIn = await getCheckInRepository().findByBooking(booking.id);
   return {
@@ -23,16 +24,17 @@ export async function validateToken(token: string) {
   };
 }
 
-export async function checkIn(token: string, coordinator: TokenPayload) {
+export async function checkIn(token: string, coordinator: TokenPayload, selectedYatraId?: string) {
  return getUnitOfWork().run(async()=>{
   const ticket = await getTicketRepository().findByToken(token);
   if (!ticket) return { ok: false as const, reason: 'INVALID' as const };
   const booking = await getBookingRepository().findById(ticket.bookingId);
   if (!booking) return { ok: false as const, reason: 'INVALID' as const };
-  if (booking.status !== BookingStatus.CONFIRMED) {
+  if (booking.status !== BookingStatus.CONFIRMED || booking.paymentStatus!==PaymentStatus.PAID) {
     return { ok: false as const, reason: 'NOT_CONFIRMED' as const };
   }
 
+  if(selectedYatraId && booking.yatraId!==selectedYatraId)return {ok:false as const,reason:'WRONG_YATRA' as const};
   const existing = await getCheckInRepository().findByBooking(booking.id);
   if (existing) {
     return { ok: false as const, reason: 'ALREADY_CHECKED_IN' as const, checkIn: existing };
@@ -69,3 +71,4 @@ export async function checkInSummary(yatraId: string) {
     checkedInBookings: checkIns.length,
   };
 }
+

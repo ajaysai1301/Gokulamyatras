@@ -157,6 +157,7 @@ model TermsAndConditions {
 }
 
 model Booking {
+  revision Int @default(0)
   requestKey String? @unique
   requestHash String?
   id            String         @id @default(uuid())
@@ -226,6 +227,7 @@ model TermsConsent {
 
 /// Payment history kept separate from bookings; records are never mutated in place.
 model Payment {
+  credentialId String?
   id                 String         @id @default(uuid())
   bookingId          String
   amount             Int            // whole INR
@@ -285,6 +287,7 @@ model AuditLog {
 
 /// One encrypted, admin-managed payment gateway configuration. Secrets are write-only.
 model PaymentGatewayConfig {
+  credentialId String?
   id                    String   @id @default("razorpay")
   provider              String   @unique @default("razorpay")
   displayName           String   @default("Razorpay")
@@ -295,4 +298,40 @@ model PaymentGatewayConfig {
   enabled               Boolean  @default(false)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+model BookingCounter {
+ year Int @id
+ seq Int
+}
+model RateLimit {
+ key String @id
+ count Int
+ expiresAt DateTime
+ @@index([expiresAt])
+}
+
+
+model WebhookEvent {
+ id String @id
+ bodyHash String
+ processedAt DateTime @default(now())
+}
+
+model GatewayCredential {
+ id String @id
+ keyId String
+ encryptedKeySecret String
+ encryptedWebhookSecret String
+ createdAt DateTime @default(now())
+}
+
+model Enquiry {
+ id String @id
+ fullName String
+ mobile String
+ email String?
+ message String
+ createdAt DateTime @default(now())
+ @@index([createdAt])
 }

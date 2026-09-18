@@ -1,3 +1,5 @@
+import { usesPostgres } from '@/lib/db/prisma';
+import { PrismaPaymentRepository } from './prisma-booking-payment';
 import { getDb, Collections, sessionOptions } from '@/lib/db/mongo';
 import { Payment } from '@/lib/domain/types';
 
@@ -33,6 +35,8 @@ class MongoPaymentRepository implements PaymentRepository {
 
 let repo: PaymentRepository | null = null;
 export function getPaymentRepository(): PaymentRepository {
+  if (usesPostgres()) return new PrismaPaymentRepository();
   if (!repo) repo = new MongoPaymentRepository();
   return repo;
 }
+

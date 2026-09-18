@@ -24,8 +24,8 @@ export default function CoordinatorPage() {
 }
 
 function CoordinatorLogin({ onDone }: { onDone: (a: ReturnType<typeof getAuth>) => void }) {
-  const [email, setEmail] = useState('coordinator@gokulamyatras.in');
-  const [password, setPassword] = useState('coord123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submit = async (e: React.FormEvent) => {
@@ -41,12 +41,11 @@ function CoordinatorLogin({ onDone }: { onDone: (a: ReturnType<typeof getAuth>) 
         <div className="mb-6 flex items-center gap-2"><LotusMark className="h-8 w-8" color="#D9761E" /><span className="font-display text-xl font-semibold">Coordinator</span></div>
         <h1 className="text-lg font-semibold">Sign in to check-in</h1>
         <form onSubmit={submit} className="mt-6 space-y-4">
-          <input className="gy-input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
-          <input type="password" className="gy-input" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" />
+          <input className="gy-input" value={email} onChange={(e) => setEmail(e.target.value)} aria-label="Email" autoComplete="username" type="email" placeholder="Email" />
+          <input type="password" className="gy-input" value={password} onChange={(e) => setPassword(e.target.value)} aria-label="Password" autoComplete="current-password" placeholder="Password" />
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button disabled={loading} className="btn-primary w-full justify-center">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign in'}</button>
         </form>
-        <p className="mt-5 rounded-lg bg-slate-50 p-3 text-xs text-slate-500">Demo: coordinator@gokulamyatras.in / coord123</p>
       </div>
     </div>
   );
@@ -74,7 +73,7 @@ function CoordinatorHome({ name, onLogout }: { name: string; onLogout: () => voi
     if (!token) return;
     setBusy(true); setResult(null);
     try {
-      const res = await staffApi<ValidateResult>(COORD_TOKEN, '/checkin/validate', { method: 'POST', body: JSON.stringify({ token }) });
+      const res = await staffApi<ValidateResult>(COORD_TOKEN, '/checkin/validate', { method: 'POST', body: JSON.stringify({ token, yatraId: selected?.id }) });
       setResult(res);
     } catch { toast.error('Could not validate ticket'); }
     finally { setBusy(false); }
@@ -83,11 +82,11 @@ function CoordinatorHome({ name, onLogout }: { name: string; onLogout: () => voi
   const doCheckIn = async (token: string) => {
     setBusy(true);
     try {
-      const res = await staffApi<{ ok: boolean; reason?: string }>(COORD_TOKEN, '/checkin', { method: 'POST', body: JSON.stringify({ token }) });
+      const res = await staffApi<{ ok: boolean; reason?: string }>(COORD_TOKEN, '/checkin', { method: 'POST', body: JSON.stringify({ token, yatraId: selected?.id }) });
       if (res.ok) { toast.success('Checked in successfully'); if (selected) loadSummary(selected); await validate(token); }
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
-      toast.warning(msg.includes('409') ? 'Already checked in' : 'Already checked in');
+      toast.warning(msg || 'Check-in failed. Checking the current ticket status.');
       await validate(token);
     } finally { setBusy(false); }
   };
@@ -96,6 +95,8 @@ function CoordinatorHome({ name, onLogout }: { name: string; onLogout: () => voi
     setScanning(true); setResult(null);
     try {
       const { Html5Qrcode } = await import('html5-qrcode');
+      // Wait for React to mount the scanner container after the state change.
+      await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
       const el = document.getElementById('qr-reader');
       if (!el) return;
       const scanner = new Html5Qrcode('qr-reader');
@@ -133,7 +134,7 @@ function CoordinatorHome({ name, onLogout }: { name: string; onLogout: () => voi
 
   return (
     <Shell name={name} onLogout={onLogout}>
-      <button onClick={() => { setSelected(null); setResult(null); stopScan(); }} className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-300"><ArrowLeft className="h-4 w-4" /> Change yatra</button>
+      <button disabled={busy} onClick={() => { setSelected(null); setResult(null); stopScan(); }} className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-300"><ArrowLeft className="h-4 w-4" /> Change yatra</button>
       <div className="rounded-xl bg-white p-4 shadow">
         <p className="font-semibold text-slate-900">{selected.name}</p>
         <p className="text-xs text-slate-500">{formatDate(selected.startDate)}</p>
@@ -171,7 +172,7 @@ function CoordinatorHome({ name, onLogout }: { name: string; onLogout: () => voi
       {result && (
         <div className="mt-5">
           {!result.valid ? (
-            <ResultCard tone="red" icon={XCircle} title="Invalid Ticket" subtitle="This QR code is not recognised." />
+            <ResultCard tone="red" icon={XCircle} title="Invalid Ticket" subtitle={result.reason==='WRONG_YATRA'?'This ticket belongs to a different yatra.':'This ticket is invalid or not paid.'} />
           ) : result.alreadyCheckedIn ? (
             <>
               <ResultCard tone="amber" icon={AlertTriangle} title="Already Checked In"
@@ -188,7 +189,7 @@ function CoordinatorHome({ name, onLogout }: { name: string; onLogout: () => voi
               </button>
             </>
           )}
-          <button onClick={() => { setResult(null); setManual(''); }} className="mt-3 w-full rounded-xl border border-slate-500 py-2.5 text-sm font-semibold text-slate-200">Scan another</button>
+          <button disabled={busy} onClick={() => { setResult(null); setManual(''); }} className="mt-3 w-full rounded-xl border border-slate-500 py-2.5 text-sm font-semibold text-slate-200">Scan another</button>
         </div>
       )}
     </Shell>
@@ -230,3 +231,4 @@ function BookingCard({ b }: { b: BookingView }) {
     </div>
   );
 }
+

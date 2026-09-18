@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Search, Eye, Loader2 } from 'lucide-react';
 import { AdminShell, Modal } from '@/components/admin/admin-shell';
 import { staffApi, ADMIN_TOKEN } from '@/lib/staff-client';
@@ -15,8 +15,8 @@ export default function AdminCustomersPage() {
   const [search, setSearch] = useState('');
   const [profile, setProfile] = useState<{ customer: Customer; bookings: Booking[] } | null>(null);
 
-  const load = () => { setLoading(true); staffApi<{ customers: Row[] }>(ADMIN_TOKEN, `/admin/customers?search=${encodeURIComponent(search)}`).then((d) => setRows(d.customers)).catch(() => {}).finally(() => setLoading(false)); };
-  useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [search]);
+  const load = useCallback(() => { setLoading(true); staffApi<{ customers: Row[] }>(ADMIN_TOKEN, `/admin/customers?search=${encodeURIComponent(search)}`).then((d) => setRows(d.customers)).catch(() => {}).finally(() => setLoading(false)); },[search]);
+  useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
 
   const view = async (id: string) => { const d = await staffApi<{ customer: Customer; bookings: Booking[] }>(ADMIN_TOKEN, `/admin/customers/${id}`); setProfile(d); };
 

@@ -1,5 +1,5 @@
 {
-  "name": "nextjs-mongo-template",
+  "name": "gokulamyatras",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -12,11 +12,16 @@
     "test": "tsx --test tests/*.test.ts",
     "preview": "tsx scripts/preview.ts",
     "audit:mongo": "tsx scripts/audit-mongo.ts",
-    "create:staff": "tsx scripts/create-staff.ts"
+    "create:staff": "tsx scripts/create-staff.ts",
+    "db:migrate": "prisma migrate deploy",
+    "test:postgres": "tsx --test tests/postgres.test.ts",
+    "test:e2e": "playwright test",
+    "postinstall": "prisma generate",
+    "lint": "eslint app components lib scripts tests"
   },
   "dependencies": {
     "@hookform/resolvers": "5.1.1",
-    "@prisma/client": "^6.19.2",
+    "@prisma/client": "6.19.2",
     "@radix-ui/react-accordion": "1.2.11",
     "@radix-ui/react-alert-dialog": "1.1.14",
     "@radix-ui/react-aspect-ratio": "1.1.7",
@@ -63,7 +68,7 @@
     "next": "15.5.25",
     "next-themes": "0.4.6",
     "qrcode.react": "4.2.0",
-    "razorpay": "^2.9.6",
+    "razorpay": "2.9.6",
     "react": "18.3.1",
     "react-day-picker": "9.7.0",
     "react-dom": "18.3.1",
@@ -79,15 +84,19 @@
     "zod": "3.25.67"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/lodash": "4.17.24",
     "@types/node": "20.14.10",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
     "autoprefixer": "10.4.19",
+    "embedded-postgres": "18.4.0-beta.17",
+    "eslint": "9.39.5",
+    "eslint-config-next": "15.5.25",
     "globals": "16.2.0",
     "mongodb-memory-server": "^11.2.0",
     "postcss": "8.5.28",
-    "prisma": "^6.19.2",
+    "prisma": "6.19.2",
     "tailwindcss": "3.4.1",
     "tsx": "^4.23.13",
     "typescript": "5.6.3"
@@ -95,7 +104,11 @@
   "packageManager": "npm@11.16.0",
   "overrides": {
     "postcss": "$postcss",
-    "sharp": "0.35.4"
+    "sharp": "0.35.4",
+    "@prisma/config": {
+      "deepmerge-ts": "8.0.2",
+      "effect": "3.22.2"
+    }
   },
   "engines": {
     "node": ">=22.13.0"

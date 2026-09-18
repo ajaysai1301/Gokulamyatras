@@ -93,3 +93,9 @@ node_modules/@next/swc-linux-arm64-gnu/next-swc.linux-arm64-gnu.node
 
 # Temporary npm cache used by sandboxed installs
 .npm-cache/
+
+.test-data/
+build.log
+browser-binaries/
+playwright-report/
+test-results/

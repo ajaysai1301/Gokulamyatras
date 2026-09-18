@@ -174,6 +174,7 @@ export interface Booking {
 }
 
 export interface Payment {
+  credentialId?:string;
   id: ID;
   bookingId: ID;
   amount: number;

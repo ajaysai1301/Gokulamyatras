@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Search, Plus, Eye, Loader2, XCircle, Printer } from 'lucide-react';
 import { AdminShell, Modal } from '@/components/admin/admin-shell';
@@ -22,15 +22,15 @@ export default function AdminBookingsPage() {
   const [detail, setDetail] = useState<BookingView | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     const qs = new URLSearchParams();
     if (search) qs.set('search', search);
     if (status) qs.set('status', status);
     if (paymentStatus) qs.set('paymentStatus', paymentStatus);
     staffApi<{ bookings: Row[] }>(ADMIN_TOKEN, `/admin/bookings?${qs.toString()}`).then((d) => setRows(d.bookings)).catch(() => {}).finally(() => setLoading(false));
-  };
-  useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [search, status, paymentStatus]);
+  },[search,status,paymentStatus]);
+  useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
 
   const view = async (reference: string) => {
     try { const d = await staffApi<{ booking: BookingView }>(ADMIN_TOKEN, `/admin/bookings/${reference}`); setDetail(d.booking); } catch { toast.error('Could not load booking'); }
@@ -109,14 +109,16 @@ function ManualBooking({ open, onClose, onDone }: { open: boolean; onClose: () =
   const [travellers,setTravellers]=useState([{fullName:'',age:0,gender:Gender.OTHER}]);
   const [method, setMethod] = useState('CASH');
   const [saving, setSaving] = useState(false);
+  const requestKey=useRef<string>();
+  useEffect(()=>{if(open)requestKey.current=crypto.randomUUID();},[open]);
   const [acceptedTerms,setAcceptedTerms]=useState(false);
-  useEffect(() => { if (open) staffApi<{ yatras: YatraView[] }>(ADMIN_TOKEN, '/admin/yatras').then((d) => setYatras(d.yatras.filter((y) => y.status === 'PUBLISHED'))); }, [open]);
+  useEffect(() => { if (open) staffApi<{ yatras: YatraView[] }>(ADMIN_TOKEN, '/admin/yatras').then((d) => setYatras(d.yatras.filter((y) => y.status === 'PUBLISHED' && Date.parse(y.startDate)>Date.now()))); }, [open]);
 
   const save = async () => {
     if (!slug || !name || !mobile) { toast.error('Yatra, name and mobile are required'); return; }
     setSaving(true);
     try {
-      await staffApi(ADMIN_TOKEN, '/admin/bookings', { method: 'POST', body: JSON.stringify({ yatraSlug: slug, primaryCustomer: { fullName: name, mobile }, travellers, paymentMethod: method, acceptedTerms, termsVersion: yatras.find(y=>y.slug===slug)?.tcVersion }) });
+      await staffApi(ADMIN_TOKEN, '/admin/bookings', { method: 'POST', body: JSON.stringify({ requestKey:requestKey.current, yatraSlug: slug, primaryCustomer: { fullName: name, mobile }, travellers, paymentMethod: method, acceptedTerms, termsVersion: yatras.find(y=>y.slug===slug)?.tcVersion }) });
       toast.success('Manual booking created & confirmed'); onDone();
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); } finally { setSaving(false); }
   };
@@ -124,7 +126,7 @@ function ManualBooking({ open, onClose, onDone }: { open: boolean; onClose: () =
   return (
     <Modal open={open} onClose={onClose} title="Create manual booking">
       <div className="space-y-3 text-sm">
-        <label>Yatra<select className="gy-input mt-1" value={slug} onChange={(e) => setSlug(e.target.value)}><option value="">Select yatra</option>{yatras.map((y) => <option key={y.id} value={y.slug}>{y.name} ({y.availability.available} left)</option>)}</select></label>
+        <label>Yatra<select aria-label="Yatra" className="gy-input mt-1" value={slug} onChange={(e) => setSlug(e.target.value)}><option value="">Select yatra</option>{yatras.map((y) => <option key={y.id} value={y.slug}>{y.name} ({y.availability.available} left)</option>)}</select></label>
         <label>Customer name<input className="gy-input mt-1" value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label>Mobile<input className="gy-input mt-1" value={mobile} onChange={(e) => setMobile(e.target.value)} /></label>
         {travellers.map((t,i)=><div key={i} className="grid grid-cols-3 gap-2">

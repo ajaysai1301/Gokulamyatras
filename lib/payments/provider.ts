@@ -15,6 +15,7 @@ export interface CreateOrderInput {
 }
 
 export interface PaymentOrder {
+  keyId?: string;
   orderId: string;
   amount: number;
   currency: string;

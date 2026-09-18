@@ -1,4 +1,5 @@
 'use client';
+import type { PublicBookingView } from '@/lib/services/public-booking';
 
 import React, { useState } from 'react';
 import Link from 'next/link';
@@ -8,14 +9,14 @@ import { Footer } from '@/components/site/footer';
 import { Ticket } from '@/components/site/ticket';
 import { OrnamentDivider } from '@/components/site/decorative';
 import { formatDate } from '@/lib/format';
-import { BookingView, BookingStatus } from '@/lib/domain/types';
+import { BookingStatus } from '@/lib/domain/types';
 
 export default function BookingLookupPage() {
   const [reference, setReference] = useState('');
   const [mobile, setMobile] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [booking, setBooking] = useState<BookingView | null>(null);
+  const [booking, setBooking] = useState<PublicBookingView | null>(null);
 
   const search = async (e: React.FormEvent) => {
     e.preventDefault();

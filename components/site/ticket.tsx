@@ -1,14 +1,15 @@
 'use client';
+import type { PublicBookingView } from '@/lib/services/public-booking';
 
 import React, { useRef } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { toPng } from 'html-to-image';
 import { Download, Printer, MapPin, CalendarDays, Clock, Users, ShieldCheck } from 'lucide-react';
-import { BookingView, PaymentStatus } from '@/lib/domain/types';
+import { PaymentStatus } from '@/lib/domain/types';
 import { formatINR, formatDate } from '@/lib/format';
 import { LotusMark } from '@/components/site/decorative';
 
-export function Ticket({ booking }: { booking: BookingView }) {
+export function Ticket({ booking }: { booking: PublicBookingView }) {
   const ref = useRef<HTMLDivElement>(null);
   const token = booking.ticket?.token || booking.reference;
   const paid = booking.paymentStatus === PaymentStatus.PAID;

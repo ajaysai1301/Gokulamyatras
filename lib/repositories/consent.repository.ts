@@ -20,7 +20,7 @@ class MongoConsentRepository implements ConsentRepository {
   }
 }
 const consentRow=(r:any):TermsConsent=>({...r,agreedAt:r.agreedAt.toISOString(),recordedBy:r.recordedBy??undefined});
-class PrismaConsentRepository implements ConsentRepository {async create(c:TermsConsent){return consentRow(await prismaDb().termsConsent.create({data:{...c,agreedAt:new Date(c.agreedAt)}}));}async findByBooking(bookingId:string){const r=await prismaDb().termsConsent.findUnique({where:{bookingId}});return r?consentRow(r):null;}}
+class PrismaConsentRepository implements ConsentRepository {async create(c:TermsConsent){return consentRow(await prismaDb().termsConsent.create({data:{...c,termsId:(await prismaDb().termsAndConditions.findUniqueOrThrow({where:{yatraId_version:{yatraId:c.yatraId,version:c.version}}})).id,agreedAt:new Date(c.agreedAt)}}));}async findByBooking(bookingId:string){const r=await prismaDb().termsConsent.findUnique({where:{bookingId}});return r?consentRow(r):null;}}
 
 let repo: ConsentRepository | null = null;
 export function getConsentRepository(): ConsentRepository {

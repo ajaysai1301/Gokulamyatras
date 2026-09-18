@@ -1,3 +1,6 @@
+import { submitEnquiry, listEnquiries } from '@/lib/services/enquiry.service';
+import { gatewaySummary, saveGateway } from '@/lib/services/gateway.service';
+import { publicBooking, publicBookingView } from '@/lib/services/public-booking';
 import { z, ZodError } from 'zod';
 import { getUnitOfWork } from '@/lib/repositories/unit-of-work';
 import { allowRequest } from '@/lib/services/security.service';
@@ -73,6 +76,8 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path?: 
       return json({ service: 'GokulamYatras API', status: 'ok' });
     }
 
+    if(route==='/payments/status' && method==='GET')return json({isMock:process.env.NODE_ENV!=='production' && process.env.ENABLE_MOCK_PAYMENTS==='true'});
+    if(route==='/enquiries' && method==='POST')return json(await submitEnquiry(await readBody(req)),201);
     // ---------- Auth ----------
     if (route === '/auth/login' && method === 'POST') {
       const body = await readBody(req);
@@ -119,7 +124,7 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path?: 
       }
       try {
         const { booking } = await createBooking({...parsed.data,source:BookingSource.ONLINE});
-        return json({ booking }, 201);
+        return json({ booking: publicBooking(booking) }, 201);
       } catch (e) {
         if (e instanceof BookingError) {
           const status = e.code === 'CAPACITY_EXCEEDED' ? 409 : e.code === 'YATRA_NOT_FOUND' ? 404 : 400;
@@ -135,7 +140,7 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path?: 
       if (!reference || !mobile) return json({ error: 'Booking ID and mobile are required' }, 400);
       const view = await lookupBooking(reference, mobile);
       if (!view) return json({ error: 'No booking found for those details' }, 404);
-      return json({ booking: view });
+      return json({ booking: publicBookingView(view) });
     }
     if (route === '/payments/order' && method === 'POST') {
       const body = await readBody(req);
@@ -161,7 +166,7 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path?: 
           providerPaymentId: input.providerPaymentId,
           providerSignature: input.providerSignature,
         });
-        return json({ result: { status: result.status, booking: result.booking } });
+        return json({ result: { status: result.status, booking: publicBooking(result.booking) } });
       } catch (e) {
         if (e instanceof PaymentError) return json({ error: e.message, code: e.code }, e.code==='BOOKING_NOT_FOUND'?404:409);
         throw e;
@@ -174,7 +179,7 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path?: 
       if (!staff) return json({ error: 'Unauthorized' }, 401);
       const body = await readBody(req);
       const token = extractToken(String(body.token || ''));
-      const res = await validateToken(token);
+      const res = await validateToken(token,z.string().min(1).max(100).parse(body.yatraId));
       return json(res);
     }
     if (route === '/checkin' && method === 'POST') {
@@ -182,7 +187,7 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path?: 
       if (!staff) return json({ error: 'Unauthorized' }, 401);
       const body = await readBody(req);
       const token = extractToken(String(body.token || ''));
-      const res = await checkIn(token, staff);
+      const res = await checkIn(token, staff,z.string().min(1).max(100).parse(body.yatraId));
       const status = res.ok ? 200 : res.reason === 'ALREADY_CHECKED_IN' ? 409 : 400;
       return json(res, status);
     }
@@ -198,6 +203,9 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path?: 
       const staff = await requireRole(req, [UserRole.ADMIN]);
       if (!staff) return json({ error: 'Unauthorized' }, 401);
 
+      if(route==='/admin/enquiries' && method==='GET')return json({enquiries:await listEnquiries()});
+      if(route==='/admin/payment-config' && method==='GET')return json(await gatewaySummary());
+      if(route==='/admin/payment-config' && method==='PUT')return json(await saveGateway(await readBody(req),staff.sub));
       if (route === '/admin/dashboard' && method === 'GET') {
         return json(await getDashboardMetrics());
       }
@@ -313,3 +321,4 @@ export const POST = handler;
 export const PUT = handler;
 export const DELETE = handler;
 export const PATCH = handler;
+

@@ -4,9 +4,9 @@ A premium, production-quality **pilgrimage (yatra) booking platform** for
 [gokulamyatras.in](https://gokulamyatras.in).
 
 Built as a **single Next.js (App Router) + TypeScript** full-stack application with a
-clean, layered architecture so it can be maintained and extended easily — and later
-migrated from the Emergent preview database (MongoDB) to production PostgreSQL/Prisma
-**without rewriting the application**.
+clean, layered architecture. PostgreSQL/Prisma is the production persistence path;
+the original Emergent MongoDB adapter remains only as legacy compatibility for local
+preview work.
 
 ---
 
@@ -17,9 +17,9 @@ migrated from the Emergent preview database (MongoDB) to production PostgreSQL/P
 | Framework        | Next.js 15 (App Router) + React 18 + TypeScript          |
 | Styling          | Tailwind CSS + shadcn/ui + lucide-react + framer-motion  |
 | Fonts            | Fraunces (display) + Inter (body)                        |
-| Preview DB       | MongoDB (via `MONGO_URL`) — Emergent environment         |
+| Legacy preview DB| MongoDB (via `MONGO_URL`) — Emergent compatibility only |
 | Production DB    | PostgreSQL + Prisma (see `prisma/schema.prisma`)         |
-| Payments         | Razorpay (test/sandbox) — *mocked in current phase*      |
+| Payments         | Razorpay (server verification and webhook idempotency)   |
 
 ---
 
@@ -41,7 +41,7 @@ Services        lib/services/*.service.ts       ← business logic, derived data
 Repositories    lib/repositories/*.repository.ts
         │  MongoXxxRepository today · PrismaXxxRepository later
         ▼
-DB adapter      lib/db/mongo.ts   (the ONLY file importing the mongodb driver)
+DB adapter      lib/db/prisma.ts (Mongo is a legacy fallback outside production)
 ```
 
 - **Domain types & enums**: `lib/domain/types.ts` — framework-agnostic entities.
@@ -97,8 +97,8 @@ See [`.env.example`](./.env.example). Every variable is documented there.
 
 | Variable                     | Purpose                                             |
 |------------------------------|-----------------------------------------------------|
-| `MONGO_URL` / `DB_NAME`      | Preview database (Emergent)                         |
-| `DATABASE_URL`               | Production PostgreSQL (Prisma)                       |
+| `MONGO_URL` / `DB_NAME`      | Legacy preview compatibility only                    |
+| `DATABASE_URL`               | Production PostgreSQL (required in production)       |
 | `NEXT_PUBLIC_BASE_URL`       | Public app URL (metadata, tickets)                  |
 | `AUTH_SECRET`                | Signing secret for admin/coordinator auth           |
 | `NEXT_PUBLIC_RAZORPAY_KEY_ID`| Razorpay key id (client-safe)                       |
@@ -107,7 +107,7 @@ See [`.env.example`](./.env.example). Every variable is documented there.
 
 ---
 
-## 5. Local development (Emergent / MongoDB)
+## 5. Local development
 
 The Emergent environment runs everything via supervisor.
 
@@ -119,7 +119,9 @@ yarn install
 sudo supervisorctl restart nextjs
 ```
 
-The Yatra collection **auto-seeds** with demo data on first request when empty.
+When `DATABASE_URL` is present, Prisma is selected for every active repository. The
+Mongo adapter is retained only for legacy preview compatibility. Use the disposable
+PostgreSQL harness (`npm run test:postgres`) for local persistence tests.
 
 ### API (all under `/api`)
 
@@ -132,38 +134,36 @@ The Yatra collection **auto-seeds** with demo data on first request when empty.
 
 ---
 
-## 6. Migrating to PostgreSQL + Prisma (Codex handoff)
+## 6. PostgreSQL operations
 
-1. Provision a free-tier Postgres (e.g. Neon / Supabase) and set `DATABASE_URL`.
-2. `npx prisma migrate dev --name init && npx prisma generate`.
-3. For each repository in `lib/repositories/*.repository.ts`, add a Prisma
-   implementation of the **same interface** (e.g. `PrismaYatraRepository`).
-4. Change the factory return (`getYatraRepository()`) to the Prisma implementation.
-5. Port `lib/data/seed.ts` to a `prisma/seed.ts` script.
-6. Services and UI require **no changes** — they only depend on interfaces.
-
----
-
-## 7. Roadmap (phased)
-
-- ✅ **Phase 1 — Foundation**: design system, public website (Home, Yatras,
-  Yatra detail), layered architecture, seed data, read APIs.
-- ⏳ **Phase 2 — Yatra admin CRUD** (create/edit/publish, images, itinerary, T&C).
-- ⏳ **Phase 3 — Booking** (multi-traveller, customer DB, capacity protection, consent).
-- ⏳ **Phase 4 — Payment** (Razorpay order → verify → webhook → idempotency).
-- ⏳ **Phase 5 — Ticketing** (QR generation, digital ticket, booking lookup).
-- ⏳ **Phase 6 — Operations** (coordinator auth, QR scanner, check-in).
-- ⏳ **Phase 7 — Admin** (reports, CSV, manual bookings, customer history, audit logs).
+1. Provision PostgreSQL (Neon is supported) and set `DATABASE_URL`.
+2. Apply the checked-in migration with `npm run db:migrate`.
+3. Run `npm run test:postgres` against a disposable PostgreSQL instance before release.
+4. Keep `ENABLE_DEMO_SEED=false` in production. Create the first staff account through
+   the controlled bootstrap process, then configure Razorpay from Admin → Payments.
+5. Vercel builds run the migration command before `next build`.
 
 ---
 
-## 8. Known limitations (current phase)
+## 7. Current capabilities
 
-- Payment/booking/admin/coordinator/auth are **not yet implemented**; "Book Your Seat"
-  and "View T&C PDF" show informative toasts as placeholders.
-- Persistence is MongoDB (preview). Prisma schema is provided for production.
-- Capacity is stored as a `booked` counter on the yatra; server-side transactional
-  enforcement arrives with the booking phase.
+- Public browsing, multi-traveller booking, T&C consent snapshots, tickets and lookup.
+- PostgreSQL repositories for users, customers, yatras, bookings, travellers, payments,
+  terms, consent, tickets, check-ins, audit logs, rate limits and reporting.
+- Razorpay order binding, amount/currency checks, signature verification, webhook
+  verification, duplicate handling and payment-state transitions.
+- Admin yatra/manual booking/customer/report/payment configuration screens and
+  coordinator QR check-in with wrong-yatra and duplicate-scan protection.
+
+---
+
+## 8. Release limitations
+
+- A real Razorpay key and webhook secret must be entered in Admin → Payments before
+  live online payment is enabled. The server fails closed when they are absent.
+- A controlled staff bootstrap is required before the first admin/coordinator login.
+- Live PostgreSQL and Razorpay sandbox verification are environment checks; unit,
+  repository, concurrency and browser tests run locally without production services.
 
 ---
 
@@ -177,10 +177,10 @@ multi-language, analytics. Each is a clean addition on top of the existing layer
 
 ## 10. Operational workflow (Milestone 2)
 
-### Demo credentials
-- Admin: `admin@gokulamyatras.in` / `admin123` \u2014 `/admin`
-- Coordinator: `coordinator@gokulamyatras.in` / `coord123` \u2014 `/coordinator`
-- Staff are auto-seeded on first login. Auth uses stateless HMAC tokens (`AUTH_SECRET`), sent as `Authorization: Bearer <token>`.
+### Staff access
+Staff accounts are created through the controlled bootstrap script or an existing
+administrator. No default credentials are shipped. Auth uses stateless HMAC tokens
+(`AUTH_SECRET`), sent as `Authorization: Bearer <token>`.
 
 ### Booking lifecycle
 `Traveller details \u2192 Review \u2192 T&C consent \u2192 (create booking) \u2192 mock payment \u2192 CONFIRMED \u2192 QR ticket`
@@ -190,11 +190,12 @@ multi-language, analytics. Each is a clean addition on top of the existing layer
 - Capacity is enforced **server-side & atomically** (`YatraRepository.tryReserve` uses a conditional `$inc`), preventing oversell under concurrency.
 - T&C consent is stored as an **immutable snapshot** (booking, yatra, version, timestamp) \u2014 never overwritten.
 
-### Payment lifecycle (mock \u2192 Razorpay-ready)
+### Payment lifecycle
 `createOrder \u2192 (user pays) \u2192 verifyPayment \u2192 server confirmation`
 - All payment logic goes through the `PaymentProvider` interface (`lib/payments/provider.ts`).
-- Current impl: `MockPaymentProvider` (`isMock=true`) simulating success/failed/pending.
-- To add Razorpay: implement `RazorpayPaymentProvider` with the same interface and return it from `getPaymentProvider()`. Verification stays server-side; no booking code changes.
+- Development can opt into `MockPaymentProvider` with `ENABLE_MOCK_PAYMENTS=true`.
+- Production uses the configured Razorpay provider. Verification stays server-side;
+  webhook events are HMAC checked and deduplicated before settlement.
 - Payments are append-only history; booking data changes never mutate past payment records.
 
 ### QR ticket lifecycle
