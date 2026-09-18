@@ -1,0 +1,88 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 40 45% 96%;
+    --foreground: 28 44% 11%;
+    --card: 40 60% 99%;
+    --card-foreground: 28 44% 11%;
+    --popover: 40 60% 99%;
+    --popover-foreground: 28 44% 11%;
+    --primary: 28 74% 49%;
+    --primary-foreground: 40 60% 99%;
+    --secondary: 38 38% 88%;
+    --secondary-foreground: 28 44% 15%;
+    --muted: 38 33% 90%;
+    --muted-foreground: 30 15% 42%;
+    --accent: 38 55% 90%;
+    --accent-foreground: 28 44% 15%;
+    --destructive: 0 72% 42%;
+    --destructive-foreground: 40 60% 99%;
+    --border: 34 28% 84%;
+    --input: 34 28% 84%;
+    --ring: 28 74% 49%;
+    --chart-1: 28 74% 49%;
+    --chart-2: 150 20% 33%;
+    --chart-3: 0 45% 27%;
+    --chart-4: 40 60% 55%;
+    --chart-5: 35 68% 62%;
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-brand-cream text-brand-ink font-sans antialiased;
+  }
+  ::selection {
+    background-color: #D9761E;
+    color: #FFFDF8;
+  }
+}
+
+@layer components {
+  .eyebrow {
+    @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-brand-saffronDark;
+  }
+  .heading-serif {
+    @apply font-display font-semibold tracking-tight text-brand-ink;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-brand-saffron px-7 py-3.5 text-sm font-semibold text-white shadow-soft transition-all duration-300 hover:bg-brand-saffronDark hover:shadow-premium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-saffron focus-visible:ring-offset-2;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-brand-ink/15 bg-white/70 px-7 py-3.5 text-sm font-semibold text-brand-ink backdrop-blur transition-all duration-300 hover:border-brand-ink/30 hover:bg-white;
+  }
+  .card-premium {
+    @apply rounded-2xl border border-brand-sand bg-brand-ivory shadow-soft;
+  }
+  .gy-input {
+    @apply w-full rounded-xl border border-brand-sand bg-white px-4 py-3 text-sm text-brand-ink outline-none transition-colors placeholder:text-brand-muted/60 focus:border-brand-saffron focus:ring-2 focus:ring-brand-saffron/20;
+  }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .hero-overlay {
+    background:
+      linear-gradient(180deg, rgba(24,14,6,0.60) 0%, rgba(24,14,6,0.32) 42%, rgba(24,14,6,0.88) 100%),
+      radial-gradient(120% 80% at 50% 42%, rgba(24,14,6,0.20) 0%, rgba(24,14,6,0.55) 100%);
+  }
+  .paper-texture {
+    background-image: radial-gradient(rgba(185,146,74,0.08) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+}
+
+@media print {
+  body { background: #fff; }
+  .no-print, header, footer { display: none !important; }
+  .ticket-print { box-shadow: none !important; }
+}
