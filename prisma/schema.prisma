@@ -1,0 +1,256 @@
+// =============================================================================
+// GokulamYatras — PRODUCTION data model (PostgreSQL + Prisma)
+// -----------------------------------------------------------------------------
+// This schema represents the INTENDED production database. The Emergent preview
+// currently runs on MongoDB behind the repository layer (see lib/repositories).
+// When Codex migrates to Postgres, generate a PrismaYatraRepository (and sibling
+// repositories) that implement the same interfaces used by lib/services/*, then
+// switch the factory in each repository file. No UI or service changes required.
+//
+// Commands (once DATABASE_URL points at Postgres):
+//   npx prisma migrate dev --name init
+//   npx prisma generate
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  COORDINATOR
+}
+
+enum YatraStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum BookingSource {
+  ONLINE
+  ADMIN
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  PARTIAL
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  RAZORPAY
+  CASH
+  UPI
+  BANK_TRANSFER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+/// Staff accounts (admin + coordinator). Public customers do not sign in for V1.
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         UserRole  @default(COORDINATOR)
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  checkIns     CheckIn[]
+  auditLogs    AuditLog[]
+}
+
+/// Reusable customer record. Never deleted on booking cancellation.
+model Customer {
+  id               String    @id @default(uuid())
+  fullName         String
+  mobile           String    @unique
+  email            String?
+  address          String?
+  emergencyContact String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  bookings         Booking[]
+
+  @@index([email])
+}
+
+model Yatra {
+  id               String       @id @default(uuid())
+  slug             String       @unique
+  name             String
+  subtitle         String
+  description      String
+  destination      String
+  heroImage        String
+  gallery          String[]
+  startDate        DateTime
+  endDate          DateTime
+  durationDays     Int
+  durationNights   Int
+  startingPoint    String
+  reportingLocation String
+  reportingTime    String
+  price            Int          // whole INR
+  capacity         Int
+  booked           Int          @default(0)
+  highlights       String[]
+  itinerary        Json         // ItineraryDay[]
+  included         String[]
+  excluded         String[]
+  importantInfo    String[]
+  featured         Boolean      @default(false)
+  status           YatraStatus  @default(DRAFT)
+  bookingOpensAt   DateTime?
+  bookingClosesAt  DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  bookings         Booking[]
+  termsVersions    TermsAndConditions[]
+  checkIns         CheckIn[]
+
+  @@index([status, startDate])
+}
+
+/// Versioned T&C PDF per yatra. Old versions are retained for historical consent.
+model TermsAndConditions {
+  id        String   @id @default(uuid())
+  yatraId   String
+  version   String
+  pdfUrl    String
+  createdAt DateTime @default(now())
+
+  yatra     Yatra    @relation(fields: [yatraId], references: [id])
+  consents  TermsConsent[]
+
+  @@unique([yatraId, version])
+}
+
+model Booking {
+  id            String         @id @default(uuid())
+  reference     String         @unique // human-readable e.g. GY-2026-0001
+  customerId    String
+  yatraId       String
+  status        BookingStatus  @default(PENDING)
+  source        BookingSource  @default(ONLINE)
+  travellerCount Int           @default(1)
+  totalAmount   Int            // whole INR
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  customer      Customer       @relation(fields: [customerId], references: [id])
+  yatra         Yatra          @relation(fields: [yatraId], references: [id])
+  travellers    Traveller[]
+  payments      Payment[]
+  consent       TermsConsent?
+  ticket        Ticket?
+  checkIn       CheckIn?
+
+  @@index([customerId])
+  @@index([yatraId, status])
+}
+
+model Traveller {
+  id                 String   @id @default(uuid())
+  bookingId          String
+  fullName           String
+  age                Int
+  gender             Gender
+  idProofType        String?
+  idProofNumber      String?
+  specialRequirements String?
+
+  booking            Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+}
+
+/// Immutable snapshot of consent. Never overwritten when the T&C PDF changes.
+model TermsConsent {
+  id         String   @id @default(uuid())
+  bookingId  String   @unique
+  termsId    String
+  version    String
+  agreed     Boolean
+  agreedAt   DateTime @default(now())
+
+  booking    Booking  @relation(fields: [bookingId], references: [id])
+  terms      TermsAndConditions @relation(fields: [termsId], references: [id])
+}
+
+/// Payment history kept separate from bookings; records are never mutated in place.
+model Payment {
+  id                 String         @id @default(uuid())
+  bookingId          String
+  amount             Int            // whole INR
+  method             PaymentMethod
+  status             PaymentStatus  @default(PENDING)
+  razorpayOrderId    String?        @unique
+  razorpayPaymentId  String?        @unique
+  razorpaySignature  String?
+  notes              String?
+  createdAt          DateTime       @default(now())
+
+  booking            Booking        @relation(fields: [bookingId], references: [id])
+
+  @@index([bookingId, status])
+}
+
+/// QR ticket — stores only a secure opaque token, never personal data.
+model Ticket {
+  id        String   @id @default(uuid())
+  bookingId String   @unique
+  token     String   @unique // encoded into the QR
+  issuedAt  DateTime @default(now())
+
+  booking   Booking  @relation(fields: [bookingId], references: [id])
+}
+
+model CheckIn {
+  id            String   @id @default(uuid())
+  bookingId     String   @unique
+  yatraId       String
+  coordinatorId String
+  checkedInAt   DateTime @default(now())
+  travellerCount Int
+
+  booking       Booking  @relation(fields: [bookingId], references: [id])
+  yatra         Yatra    @relation(fields: [yatraId], references: [id])
+  coordinator   User     @relation(fields: [coordinatorId], references: [id])
+
+  @@index([yatraId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId])
+}
