@@ -27,7 +27,7 @@ export async function createOrder(bookingReference:string) {
   return {...order,isMock:provider.isMock};
  });
 }
-export async function verifyAndConfirm(params:{bookingReference:string;orderId:string;simulate?:PaymentOutcome}):Promise<{status:PaymentStatus;booking:Booking}> {
+export async function verifyAndConfirm(params:{bookingReference:string;orderId:string;simulate?:PaymentOutcome;providerPaymentId?:string;providerSignature?:string}):Promise<{status:PaymentStatus;booking:Booking}> {
  const provider=getPaymentProvider();
  return getUnitOfWork().run(async()=>{
   const repo=getBookingRepository();const b=await repo.findByReference(params.bookingReference);
@@ -39,7 +39,7 @@ export async function verifyAndConfirm(params:{bookingReference:string;orderId:s
   await repo.update(b.id,{updatedAt:new Date().toISOString()});
   const result=await provider.verifyPayment({...params,amount:b.totalAmount});
   if(result.status===PaymentStatus.PENDING) return {status:result.status,booking:b};
-  await getPaymentRepository().create({id:uuidv4(),bookingId:b.id,amount:b.totalAmount,method:PaymentMethod.MOCK,status:result.status,providerOrderId:params.orderId,providerPaymentId:result.providerPaymentId,createdAt:new Date().toISOString()});
+  await getPaymentRepository().create({id:uuidv4(),bookingId:b.id,amount:b.totalAmount,method:provider.isMock?PaymentMethod.MOCK:PaymentMethod.RAZORPAY,status:result.status,providerOrderId:params.orderId,providerPaymentId:result.providerPaymentId,providerSignature:result.providerSignature,createdAt:new Date().toISOString()});
   const booking=(await repo.update(b.id,{status:result.status===PaymentStatus.PAID?BookingStatus.CONFIRMED:BookingStatus.CANCELLED,paymentStatus:result.status}))!;
   if(result.status===PaymentStatus.PAID) await issueTicket(b.id);
   else await getYatraRepository().releaseSeats(b.yatraId,b.travellerCount);

@@ -282,3 +282,17 @@ model AuditLog {
 
   @@index([entity, entityId])
 }
+
+/// One encrypted, admin-managed payment gateway configuration. Secrets are write-only.
+model PaymentGatewayConfig {
+  id                    String   @id @default("razorpay")
+  provider              String   @unique @default("razorpay")
+  displayName           String   @default("Razorpay")
+  keyId                 String
+  encryptedKeySecret    String
+  encryptedWebhookSecret String
+  testMode              Boolean  @default(true)
+  enabled               Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}

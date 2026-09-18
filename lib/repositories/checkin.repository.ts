@@ -1,4 +1,5 @@
 import { getDb, Collections, sessionOptions } from '@/lib/db/mongo';
+import { prismaDb, usesPostgres } from '@/lib/db/prisma';
 import { CheckIn } from '@/lib/domain/types';
 
 export interface CheckInRepository {
@@ -6,6 +7,8 @@ export interface CheckInRepository {
   findByBooking(bookingId: string): Promise<CheckIn | null>;
   findByYatra(yatraId: string): Promise<CheckIn[]>;
 }
+const row=(r:any):CheckIn=>({...r,checkedInAt:r.checkedInAt.toISOString()});
+class PrismaCheckInRepository implements CheckInRepository {async create(c:CheckIn){return row(await prismaDb().checkIn.create({data:{...c,checkedInAt:new Date(c.checkedInAt)}}));}async findByBooking(bookingId:string){const r=await prismaDb().checkIn.findUnique({where:{bookingId}});return r?row(r):null;}async findByYatra(yatraId:string){return (await prismaDb().checkIn.findMany({where:{yatraId}})).map(row);}}
 
 class MongoCheckInRepository implements CheckInRepository {
   async create(checkIn: CheckIn) {
@@ -28,6 +31,6 @@ class MongoCheckInRepository implements CheckInRepository {
 
 let repo: CheckInRepository | null = null;
 export function getCheckInRepository(): CheckInRepository {
-  if (!repo) repo = new MongoCheckInRepository();
+  if(!repo || (usesPostgres() && !(repo instanceof PrismaCheckInRepository)) || (!usesPostgres() && !(repo instanceof MongoCheckInRepository)))repo=usesPostgres()?new PrismaCheckInRepository():new MongoCheckInRepository();
   return repo;
 }
