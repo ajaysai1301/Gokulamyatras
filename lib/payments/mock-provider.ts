@@ -39,6 +39,7 @@ let provider: PaymentProvider | null = null;
 
 /** Factory — swap the implementation here to plug in Razorpay later. */
 export function getPaymentProvider(): PaymentProvider {
+  if (process.env.ENABLE_MOCK_PAYMENTS !== 'true' || process.env.NODE_ENV === 'production') throw new Error('Mock payments are disabled');
   if (!provider) provider = new MockPaymentProvider();
   return provider;
 }

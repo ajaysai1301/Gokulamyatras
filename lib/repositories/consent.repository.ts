@@ -1,4 +1,4 @@
-import { getDb, Collections } from '@/lib/db/mongo';
+import { getDb, Collections, sessionOptions } from '@/lib/db/mongo';
 import { TermsConsent } from '@/lib/domain/types';
 
 export interface ConsentRepository {
@@ -9,12 +9,12 @@ export interface ConsentRepository {
 class MongoConsentRepository implements ConsentRepository {
   async create(consent: TermsConsent) {
     const db = await getDb();
-    await db.collection(Collections.termsConsents).insertOne({ ...consent });
+    await db.collection(Collections.termsConsents).insertOne({ ...consent }, sessionOptions());
     return consent;
   }
   async findByBooking(bookingId: string) {
     const db = await getDb();
-    const doc = await db.collection(Collections.termsConsents).findOne({ bookingId }, { projection: { _id: 0 } });
+    const doc = await db.collection(Collections.termsConsents).findOne({ bookingId }, { ...sessionOptions(), projection: { _id: 0 } });
     return (doc as unknown as TermsConsent) || null;
   }
 }

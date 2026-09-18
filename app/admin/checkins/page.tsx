@@ -12,7 +12,7 @@ export default function AdminCheckinsPage() {
   const [summary, setSummary] = useState<{ bookedTravellers: number; checkedInTravellers: number; remaining: number; confirmedBookings: number; checkedInBookings: number } | null>(null);
 
   useEffect(() => { staffApi<{ yatras: YatraView[] }>(ADMIN_TOKEN, '/admin/yatras').then((d) => setYatras(d.yatras)); }, []);
-  useEffect(() => { if (yatraId) staffApi(ADMIN_TOKEN, `/checkin/summary?yatraId=${yatraId}`).then(setSummary).catch(() => setSummary(null)); }, [yatraId]);
+  useEffect(() => { if (yatraId) staffApi<NonNullable<typeof summary>>(ADMIN_TOKEN, `/checkin/summary?yatraId=${yatraId}`).then(setSummary).catch(() => setSummary(null)); }, [yatraId]);
 
   const pct = summary && summary.bookedTravellers ? Math.round((summary.checkedInTravellers / summary.bookedTravellers) * 100) : 0;
 

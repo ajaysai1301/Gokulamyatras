@@ -33,6 +33,7 @@ export enum PaymentStatus {
 }
 
 export enum PaymentMethod {
+  MOCK = 'MOCK',
   RAZORPAY = 'RAZORPAY',
   CASH = 'CASH',
   UPI = 'UPI',
@@ -148,8 +149,12 @@ export interface Traveller {
  * later edits to the yatra never alter historical bookings.
  */
 export interface Booking {
+  requestKey?:string;
+  requestHash?:string;
   id: ID;
   reference: string; // human-readable, e.g. GMY-2026-00001
+  customerSnapshot: Customer;
+  expiresAt: string;
   customerId: ID;
   yatraId: ID;
   yatraSlug: string;
@@ -186,6 +191,9 @@ export interface TermsConsent {
   bookingId: ID;
   yatraId: ID;
   version: string;
+  termsHtml: string;
+  contentHash: string;
+  recordedBy?: string;
   agreed: boolean;
   agreedAt: string;
 }
@@ -248,9 +256,11 @@ export interface TravellerInput {
 }
 
 export interface CreateBookingInput {
+  requestKey?:string;
   yatraSlug: string;
   primaryCustomer: PrimaryCustomerInput;
   travellers: TravellerInput[];
+  termsVersion: string;
   acceptedTerms: boolean;
   source?: BookingSource;
 }

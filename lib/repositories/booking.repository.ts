@@ -1,4 +1,4 @@
-import { getDb, Collections } from '@/lib/db/mongo';
+import { getDb, Collections, sessionOptions } from '@/lib/db/mongo';
 import { Booking, Traveller } from '@/lib/domain/types';
 
 function strip<T>(doc: unknown): T | null {
@@ -16,6 +16,7 @@ export interface BookingFilter {
 }
 
 export interface BookingRepository {
+  findByRequestKey(key:string):Promise<Booking|null>;
   nextReference(year: number): Promise<string>;
   create(booking: Booking): Promise<Booking>;
   findByReference(reference: string): Promise<Booking | null>;
@@ -28,13 +29,14 @@ export interface BookingRepository {
 }
 
 class MongoBookingRepository implements BookingRepository {
+  async findByRequestKey(requestKey:string){const db=await getDb();return strip<Booking>(await db.collection(Collections.bookings).findOne({requestKey},sessionOptions()));}
   async nextReference(year: number): Promise<string> {
     const db = await getDb();
     const key = `booking-${year}`;
     const res = await db.collection(Collections.counters).findOneAndUpdate(
       { _id: key as unknown as object },
       { $inc: { seq: 1 } },
-      { upsert: true, returnDocument: 'after' },
+      { ...sessionOptions(), upsert: true, returnDocument: 'after' },
     );
     // mongodb v6 returns the document directly; guard both shapes.
     const anyRes = res as unknown as { seq?: number; value?: { seq?: number } } | null;
@@ -43,20 +45,20 @@ class MongoBookingRepository implements BookingRepository {
   }
   async create(booking: Booking) {
     const db = await getDb();
-    await db.collection(Collections.bookings).insertOne({ ...booking });
+    await db.collection(Collections.bookings).insertOne({ ...booking }, sessionOptions());
     return booking;
   }
   async findByReference(reference: string) {
     const db = await getDb();
-    return strip<Booking>(await db.collection(Collections.bookings).findOne({ reference }));
+    return strip<Booking>(await db.collection(Collections.bookings).findOne({ reference }, sessionOptions()));
   }
   async findById(id: string) {
     const db = await getDb();
-    return strip<Booking>(await db.collection(Collections.bookings).findOne({ id }));
+    return strip<Booking>(await db.collection(Collections.bookings).findOne({ id }, sessionOptions()));
   }
   async update(id: string, patch: Partial<Booking>) {
     const db = await getDb();
-    await db.collection(Collections.bookings).updateOne({ id }, { $set: { ...patch, updatedAt: new Date().toISOString() } });
+    await db.collection(Collections.bookings).updateOne({ id }, { $inc:{revision:1}, $set: { ...patch, updatedAt: new Date().toISOString() } }, sessionOptions());
     return this.findById(id);
   }
   async findAll(filter: BookingFilter = {}) {
@@ -66,25 +68,26 @@ class MongoBookingRepository implements BookingRepository {
     if (filter.status) q.status = filter.status;
     if (filter.paymentStatus) q.paymentStatus = filter.paymentStatus;
     if (filter.search) {
-      const rx = { $regex: filter.search, $options: 'i' };
+      const literal = Array.from(filter.search).map(c => ('.*+?^$' + '{}()|[]\\').includes(c) ? '\\' + c : c).join('');
+      const rx = { $regex: literal, $options:'i' };
       q.$or = [{ reference: rx }, { yatraName: rx }];
     }
-    const docs = await db.collection(Collections.bookings).find(q, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
+    const docs = await db.collection(Collections.bookings).find(q, { ...sessionOptions(), projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
     return docs as unknown as Booking[];
   }
   async findByCustomer(customerId: string) {
     const db = await getDb();
-    const docs = await db.collection(Collections.bookings).find({ customerId }, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
+    const docs = await db.collection(Collections.bookings).find({ customerId }, { ...sessionOptions(), projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
     return docs as unknown as Booking[];
   }
   async saveTravellers(travellers: Traveller[]) {
     if (!travellers.length) return;
     const db = await getDb();
-    await db.collection(Collections.travellers).insertMany(travellers.map((t) => ({ ...t })));
+    await db.collection(Collections.travellers).insertMany(travellers.map((t) => ({ ...t })), sessionOptions());
   }
   async findTravellers(bookingId: string) {
     const db = await getDb();
-    const docs = await db.collection(Collections.travellers).find({ bookingId }, { projection: { _id: 0 } }).toArray();
+    const docs = await db.collection(Collections.travellers).find({ bookingId }, { ...sessionOptions(), projection: { _id: 0 } }).toArray();
     return docs as unknown as Traveller[];
   }
 }

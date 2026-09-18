@@ -1,3 +1,5 @@
+import { getAuditRepository } from '@/lib/repositories/audit.repository';
+import { getUnitOfWork } from '@/lib/repositories/unit-of-work';
 import { v4 as uuidv4 } from 'uuid';
 import { getTicketRepository } from '@/lib/repositories/ticket.repository';
 import { getBookingRepository } from '@/lib/repositories/booking.repository';
@@ -10,7 +12,7 @@ export async function validateToken(token: string) {
   const ticket = await getTicketRepository().findByToken(token);
   if (!ticket) return { valid: false as const, reason: 'INVALID' as const };
   const booking = await getBookingRepository().findById(ticket.bookingId);
-  if (!booking) return { valid: false as const, reason: 'INVALID' as const };
+  if (!booking || booking.status!==BookingStatus.CONFIRMED) return { valid: false as const, reason: 'INVALID' as const };
   const view = await getBookingView(booking.reference);
   const existingCheckIn = await getCheckInRepository().findByBooking(booking.id);
   return {
@@ -22,6 +24,7 @@ export async function validateToken(token: string) {
 }
 
 export async function checkIn(token: string, coordinator: TokenPayload) {
+ return getUnitOfWork().run(async()=>{
   const ticket = await getTicketRepository().findByToken(token);
   if (!ticket) return { ok: false as const, reason: 'INVALID' as const };
   const booking = await getBookingRepository().findById(ticket.bookingId);
@@ -35,6 +38,7 @@ export async function checkIn(token: string, coordinator: TokenPayload) {
     return { ok: false as const, reason: 'ALREADY_CHECKED_IN' as const, checkIn: existing };
   }
 
+  await getBookingRepository().update(booking.id,{updatedAt:new Date().toISOString()});
   const record: CheckIn = {
     id: uuidv4(),
     bookingId: booking.id,
@@ -44,14 +48,10 @@ export async function checkIn(token: string, coordinator: TokenPayload) {
     travellerCount: booking.travellerCount,
     checkedInAt: new Date().toISOString(),
   };
-  try {
-    await getCheckInRepository().create(record);
-  } catch {
-    // Unique index violation => concurrent duplicate; return already checked in.
-    const now = await getCheckInRepository().findByBooking(booking.id);
-    return { ok: false as const, reason: 'ALREADY_CHECKED_IN' as const, checkIn: now };
-  }
+  await getCheckInRepository().create(record);
+  await getAuditRepository().append({action:'CHECK_IN',entity:'Booking',entityId:booking.id,userId:coordinator.sub});
   return { ok: true as const, checkIn: record };
+ });
 }
 
 export async function checkInSummary(yatraId: string) {
